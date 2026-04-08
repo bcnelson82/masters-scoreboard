@@ -1,79 +1,196 @@
 const trashTalkLines = [
-  "Might be time to switch sports.",
-  "Somebody forgot how to putt.",
-  "This is getting hard to watch.",
-  "Masters called... they want better golf.",
-  "Currently sponsored by bogeys.",
-  "You guys practicing or competing?"
+  "Currently searching for fairways, confidence, and a small miracle.",
+  "This side appears to be honoring tradition by donating strokes.",
+  "The green jacket committee has declined to comment.",
+  "Strong clubhouse vibes. Less strong golf vibes.",
+  "This card is proudly powered by missed putts.",
+  "At this point, bogey avoidance would count as momentum.",
+  "Someone check whether the range session ever actually ended.",
+  "A bold strategy to let the other side feel comfortable."
 ];
 
-async function loadScores() {
-  const res = await fetch('data/latest.json');
-  const data = await res.json();
-
-  updateTeam(data.team1, 'score1', 'players1');
-  updateTeam(data.team2, 'score2', 'players2');
-
-  applyGameLogic(data.team1.total, data.team2.total);
+function scoreToNumber(score) {
+  if (score === null || score === undefined) return 9999;
+  const s = String(score).trim().toUpperCase();
+  if (s === "E") return 0;
+  if (s === "--" || s === "CUT" || s === "WD") return 9999;
+  const n = Number(s);
+  return Number.isNaN(n) ? 9999 : n;
 }
 
-function updateTeam(team, scoreId, playersId) {
-  document.getElementById(scoreId).innerText = team.total;
-
-  const container = document.getElementById(playersId);
-  container.innerHTML = '';
-
-  team.players.forEach(p => {
-    const div = document.createElement('div');
-    div.className = 'player';
-
-    div.innerHTML = `
-      <div class="player-name">${p.name}</div>
-      <div>
-        <div class="player-score">${p.score}</div>
-        <div class="status">${p.status}</div>
-      </div>
-    `;
-
-    container.appendChild(div);
-  });
-}
-
-function applyGameLogic(score1, score2) {
-  const team1 = document.getElementById('team1');
-  const team2 = document.getElementById('team2');
-
-  const badge1 = document.getElementById('badge1');
-  const badge2 = document.getElementById('badge2');
-
-  const trash1 = document.getElementById('trash1');
-  const trash2 = document.getElementById('trash2');
-
-  team1.classList.remove('leading');
-  team2.classList.remove('leading');
-  badge1.style.display = 'none';
-  badge2.style.display = 'none';
-  trash1.innerText = '';
-  trash2.innerText = '';
-
-  if (score1 < score2) {
-    team1.classList.add('leading');
-    badge1.style.display = 'inline-block';
-    badge1.innerText = 'LEADING';
-    trash2.innerText = randomTrash();
-  } else if (score2 < score1) {
-    team2.classList.add('leading');
-    badge2.style.display = 'inline-block';
-    badge2.innerText = 'LEADING';
-    trash1.innerText = randomTrash();
-  } else {
-    trash1.innerText = "Too close to call.";
-    trash2.innerText = "Too close to call.";
-  }
+function formatScore(score) {
+  if (score === null || score === undefined) return "--";
+  const s = String(score).trim().toUpperCase();
+  if (s === "E" || s === "CUT" || s === "WD" || s === "--") return s;
+  const n = Number(s);
+  if (Number.isNaN(n)) return s;
+  if (n > 0) return `+${n}`;
+  return `${n}`;
 }
 
 function randomTrash() {
   return trashTalkLines[Math.floor(Math.random() * trashTalkLines.length)];
+}
+
+function safeTimestamp(ts) {
+  if (!ts) return "Updated just now";
+  const date = new Date(ts);
+  if (Number.isNaN(date.getTime())) return `Updated ${ts}`;
+  return `Updated ${date.toLocaleString()}`;
+}
+
+function getTopPerformer(players) {
+  if (!players || !players.length) return null;
+  const sorted = [...players].sort((a, b) => scoreToNumber(a.score) - scoreToNumber(b.score));
+  return sorted[0] || null;
+}
+
+function sortPlayers(players) {
+  return [...players].sort((a, b) => {
+    const scoreDiff = scoreToNumber(a.score) - scoreToNumber(b.score);
+    if (scoreDiff !== 0) return scoreDiff;
+    return String(a.name).localeCompare(String(b.name));
+  });
+}
+
+function pulseScore(el) {
+  el.classList.remove("pulse");
+  void el.offsetWidth;
+  el.classList.add("pulse");
+  setTimeout(() => el.classList.remove("pulse"), 240);
+}
+
+function renderTeam(team, ids) {
+  const scoreEl = document.getElementById(ids.score);
+  const playersEl = document.getElementById(ids.players);
+  const topEl = document.getElementById(ids.top);
+  const countEl = document.getElementById(ids.count);
+
+  scoreEl.textContent = formatScore(team.total);
+  pulseScore(scoreEl);
+
+  const players = sortPlayers(team.players || []);
+  const topPlayer = getTopPerformer(players);
+
+  topEl.textContent = topPlayer
+    ? `${topPlayer.name} (${formatScore(topPlayer.score)})`
+    : "—";
+
+  countEl.textContent = `${players.length} players`;
+
+  playersEl.innerHTML = "";
+
+  players.forEach((p, index) => {
+    const row = document.createElement("div");
+    row.className = "player-row";
+
+    const topBadge = index === 0
+      ? `<span class="top-badge">Top Form</span>`
+      : "";
+
+    row.innerHTML = `
+      <div class="player-left">
+        <div class="player-name-line">
+          <div class="player-name">${p.name}</div>
+          ${topBadge}
+        </div>
+        <div class="player-status">${p.status || "Waiting to tee off"}</div>
+      </div>
+      <div class="player-right">
+        <div class="player-score">${formatScore(p.score)}</div>
+        <div class="player-rank-note">Roster spot ${index + 1}</div>
+      </div>
+    `;
+
+    playersEl.appendChild(row);
+  });
+}
+
+function applyGameLogic(team1, team2) {
+  const card1 = document.getElementById("team1");
+  const card2 = document.getElementById("team2");
+  const badge1 = document.getElementById("badge1");
+  const badge2 = document.getElementById("badge2");
+  const trash1 = document.getElementById("trash1");
+  const trash2 = document.getElementById("trash2");
+
+  const s1 = scoreToNumber(team1.total);
+  const s2 = scoreToNumber(team2.total);
+
+  card1.classList.remove("leading", "trailing");
+  card2.classList.remove("leading", "trailing");
+  badge1.style.display = "none";
+  badge2.style.display = "none";
+  trash1.textContent = "";
+  trash2.textContent = "";
+
+  if (s1 < s2) {
+    card1.classList.add("leading");
+    card2.classList.add("trailing");
+    badge1.style.display = "inline-flex";
+    badge1.textContent = "Leading";
+    trash2.textContent = randomTrash();
+  } else if (s2 < s1) {
+    card2.classList.add("leading");
+    card1.classList.add("trailing");
+    badge2.style.display = "inline-flex";
+    badge2.textContent = "Leading";
+    trash1.textContent = randomTrash();
+  } else {
+    trash1.textContent = "All square. Nobody gets chesty just yet.";
+    trash2.textContent = "Dead heat. Tension levels: appropriately high.";
+  }
+}
+
+function detectEventStatus(data) {
+  const allPlayers = [
+    ...(data.team1?.players || []),
+    ...(data.team2?.players || [])
+  ];
+
+  const statuses = allPlayers.map(p => String(p.status || "").trim()).filter(Boolean);
+
+  if (!statuses.length) return "Live Scoring";
+
+  const live = statuses.find(s => /thru|r\d/i.test(s));
+  if (live) return live;
+
+  const complete = statuses.find(s => /complete|final|finished/i.test(s));
+  if (complete) return complete;
+
+  return "Live Scoring";
+}
+
+async function loadScores() {
+  try {
+    const res = await fetch("data/latest.json", { cache: "no-store" });
+    const data = await res.json();
+
+    renderTeam(data.team1, {
+      score: "score1",
+      players: "players1",
+      top: "top1",
+      count: "players-count-1"
+    });
+
+    renderTeam(data.team2, {
+      score: "score2",
+      players: "players2",
+      top: "top2",
+      count: "players-count-2"
+    });
+
+    applyGameLogic(data.team1, data.team2);
+
+    document.getElementById("updated-at").textContent =
+      safeTimestamp(data.updated_at || data.updatedAt || data.timestamp);
+
+    document.getElementById("event-status").textContent = detectEventStatus(data);
+  } catch (err) {
+    document.getElementById("updated-at").textContent =
+      "Could not load latest scoring data";
+    console.error(err);
+  }
 }
 
 loadScores();
