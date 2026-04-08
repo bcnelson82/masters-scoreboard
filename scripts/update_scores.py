@@ -302,9 +302,10 @@ def load_config(config_path):
         return event, teams
 
     event = {
-        "name": "Masters Tournament",
-        "short_name": "Masters",
-        "year": 2026
+    "name": "Masters Tournament",
+    "short_name": "Masters",
+    "year": 2026,
+    "par": 72
     }
 
     teams = []
