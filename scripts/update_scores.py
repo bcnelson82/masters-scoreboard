@@ -270,9 +270,19 @@ def load_config(config_path):
 
     def normalize_player(player):
         if isinstance(player, str):
-            return SimpleNamespace(name=player)
+            return SimpleNamespace(
+                name=player,
+                aliases=[player]
+            )
+
         if isinstance(player, dict):
-            return SimpleNamespace(name=player.get("name", "Unknown"))
+            name = player.get("name", "Unknown")
+            aliases = player.get("aliases", [name])
+            return SimpleNamespace(
+                name=name,
+                aliases=aliases
+            )
+
         raise ValueError(f"Unsupported player format: {player!r}")
 
     def normalize_team(team):
@@ -286,13 +296,11 @@ def load_config(config_path):
     with open(config_path, "r", encoding="utf-8") as f:
         raw = json.load(f)
 
-    # Original format
     if "event" in raw and "teams" in raw:
         event = raw["event"]
         teams = [normalize_team(team) for team in raw["teams"]]
         return event, teams
 
-    # Simplified format
     event = {
         "name": "Masters Tournament",
         "short_name": "Masters",
