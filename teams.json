@@ -1,32 +1,45 @@
 {
-  "team1": {
-    "name": "Dave's Duffers",
-    "players": [
-      "Scottie Scheffler",
-      "Bryson DeChambeau",
-      "Xander Schauffele",
-      "Cameron Young",
-      "Collin Morikawa",
-      "Hideki Matsuyama",
-      "Brooks Koepka",
-      "Robert MacIntyre",
-      "Viktor Hovland",
-      "Akshay Bhatia"
-    ]
+  "event": {
+    "name": "Masters Tournament",
+    "par": 72,
+    "leaderboardUrl": "https://www.espn.com/golf/leaderboard/_/tournamentId/401811941",
+    "refreshMinutes": 10,
+    "scoringRule": "Team score is the sum of all 10 players' current score to par. Lower is better. Players who have not started are counted as E (0)."
   },
-  "team2": {
-    "name": "Brian's Ballers",
-    "players": [
-      "Rory McIlroy",
-      "Ludvig Aberg",
-      "Tommy Fleetwood",
-      "Matt Fitzpatrick",
-      "Justin Rose",
-      "Jon Rahm",
-      "Min Woo Lee",
-      "Chris Gotterup",
-      "Justin Thomas",
-      "Patrick Cantlay"
-    ]
-  }
+  "teams": [
+    {
+      "slug": "team-scheffler",
+      "displayName": "Team Scheffler",
+      "subtitle": "Edit this in teams.json to your captain's name",
+      "players": [
+        {"name": "Scottie Scheffler", "aliases": ["Scottie Scheffler"]},
+        {"name": "Bryson DeChambeau", "aliases": ["Bryson DeChambeau"]},
+        {"name": "Xander Schauffele", "aliases": ["Xander Schauffele"]},
+        {"name": "Cameron Young", "aliases": ["Cameron Young"]},
+        {"name": "Collin Morikawa", "aliases": ["Collin Morikawa"]},
+        {"name": "Hideki Matsuyama", "aliases": ["Hideki Matsuyama"]},
+        {"name": "Brooks Koepka", "aliases": ["Brooks Koepka"]},
+        {"name": "Robert MacIntyre", "aliases": ["Robert MacIntyre", "Bob MacIntyre", "McIntyre"]},
+        {"name": "Viktor Hovland", "aliases": ["Viktor Hovland"]},
+        {"name": "Akshay Bhatia", "aliases": ["Akshay Bhatia", "Akshay Battia", "Battia"]}
+      ]
+    },
+    {
+      "slug": "team-rory",
+      "displayName": "Team McIlroy",
+      "subtitle": "Edit this in teams.json to your captain's name",
+      "players": [
+        {"name": "Rory McIlroy", "aliases": ["Rory McIlroy"]},
+        {"name": "Ludvig Åberg", "aliases": ["Ludvig Åberg", "Ludvig Aberg", "Ludvig Oberg", "Oberg"]},
+        {"name": "Tommy Fleetwood", "aliases": ["Tommy Fleetwood"]},
+        {"name": "Matt Fitzpatrick", "aliases": ["Matt Fitzpatrick"]},
+        {"name": "Justin Rose", "aliases": ["Justin Rose"]},
+        {"name": "Jon Rahm", "aliases": ["Jon Rahm"]},
+        {"name": "Min Woo Lee", "aliases": ["Min Woo Lee", "Minwoo Lee"]},
+        {"name": "Chris Gotterup", "aliases": ["Chris Gotterup", "Chris Godarup", "Godarup", "Gotarup"]},
+        {"name": "Justin Thomas", "aliases": ["Justin Thomas"]},
+        {"name": "Patrick Cantlay", "aliases": ["Patrick Cantlay"]}
+      ]
+    }
+  ]
 }
