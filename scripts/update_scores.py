@@ -268,20 +268,29 @@ def load_config(config_path):
     import json
     from types import SimpleNamespace
 
+    def normalize_player(player):
+        if isinstance(player, str):
+            return SimpleNamespace(name=player)
+        if isinstance(player, dict):
+            return SimpleNamespace(name=player.get("name", "Unknown"))
+        raise ValueError(f"Unsupported player format: {player!r}")
+
+    def normalize_team(team):
+        if isinstance(team, dict):
+            return SimpleNamespace(
+                name=team.get("name", "Team"),
+                players=[normalize_player(p) for p in team.get("players", [])]
+            )
+        raise ValueError(f"Unsupported team format: {team!r}")
+
     with open(config_path, "r", encoding="utf-8") as f:
         raw = json.load(f)
 
     # Original format
     if "event" in raw and "teams" in raw:
-        teams = []
-        for team in raw["teams"]:
-            teams.append(
-                SimpleNamespace(
-                    name=team["name"],
-                    players=team["players"]
-                )
-            )
-        return raw["event"], teams
+        event = raw["event"]
+        teams = [normalize_team(team) for team in raw["teams"]]
+        return event, teams
 
     # Simplified format
     event = {
@@ -291,22 +300,10 @@ def load_config(config_path):
     }
 
     teams = []
-
     if "team1" in raw:
-        teams.append(
-            SimpleNamespace(
-                name=raw["team1"].get("name", "Team 1"),
-                players=raw["team1"].get("players", [])
-            )
-        )
-
+        teams.append(normalize_team(raw["team1"]))
     if "team2" in raw:
-        teams.append(
-            SimpleNamespace(
-                name=raw["team2"].get("name", "Team 2"),
-                players=raw["team2"].get("players", [])
-            )
-        )
+        teams.append(normalize_team(raw["team2"]))
 
     if not teams:
         raise ValueError(
