@@ -266,19 +266,24 @@ def parse_player_state(line: str, alias: str, canonical_name: str, par: int) -> 
 
 def load_config(config_path):
     import json
+    from types import SimpleNamespace
 
     with open(config_path, "r", encoding="utf-8") as f:
         raw = json.load(f)
 
-    # Support original config format
+    # Original format
     if "event" in raw and "teams" in raw:
-        return raw["event"], raw["teams"]
+        teams = []
+        for team in raw["teams"]:
+            teams.append(
+                SimpleNamespace(
+                    name=team["name"],
+                    players=team["players"]
+                )
+            )
+        return raw["event"], teams
 
-    # Support simplified format:
-    # {
-    #   "team1": {"name": "...", "players": [...]},
-    #   "team2": {"name": "...", "players": [...]}
-    # }
+    # Simplified format
     event = {
         "name": "Masters Tournament",
         "short_name": "Masters",
@@ -288,22 +293,27 @@ def load_config(config_path):
     teams = []
 
     if "team1" in raw:
-        teams.append({
-            "name": raw["team1"].get("name", "Team 1"),
-            "players": raw["team1"].get("players", [])
-        })
+        teams.append(
+            SimpleNamespace(
+                name=raw["team1"].get("name", "Team 1"),
+                players=raw["team1"].get("players", [])
+            )
+        )
 
     if "team2" in raw:
-        teams.append({
-            "name": raw["team2"].get("name", "Team 2"),
-            "players": raw["team2"].get("players", [])
-        })
+        teams.append(
+            SimpleNamespace(
+                name=raw["team2"].get("name", "Team 2"),
+                players=raw["team2"].get("players", [])
+            )
+        )
 
     if not teams:
-        raise ValueError("teams.json must contain either {'event','teams'} or {'team1','team2'}")
+        raise ValueError(
+            "teams.json must contain either {'event','teams'} or {'team1','team2'}"
+        )
 
     return event, teams
-
 
 
 def build_output(lines: list[str], mode: str, event: dict, teams: list[TeamConfig], source_url: str | None) -> dict:
