@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Masters Team Scoreboard</title>
+    <meta
+      name="description"
+      content="A lightweight landing page that compares two fantasy-style Masters teams in real time."
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Masters team tracker</p>
+          <h1>Two teams. One scoreboard.</h1>
+          <p id="hero-subtitle" class="hero-copy">
+            Loading the latest team totals…
+          </p>
+        </div>
+        <div class="hero-meta">
+          <div class="meta-pill">
+            <span class="meta-label">Last updated</span>
+            <strong id="last-updated">—</strong>
+          </div>
+          <div class="meta-pill">
+            <span class="meta-label">Refresh cadence</span>
+            <strong id="refresh-cadence">—</strong>
+          </div>
+        </div>
+      </header>
+
+      <main>
+        <section class="overview-grid" id="overview-grid"></section>
+
+        <section class="section-heading">
+          <div>
+            <p class="eyebrow">Roster detail</p>
+            <h2>Every player at a glance</h2>
+          </div>
+          <p class="section-note" id="source-note">Loading source information…</p>
+        </section>
+
+        <section class="team-grid" id="team-grid"></section>
+      </main>
+    </div>
+
+    <template id="overview-card-template">
+      <article class="overview-card">
+        <div class="overview-header">
+          <div>
+            <p class="team-label"></p>
+            <h3 class="team-title"></h3>
+            <p class="team-subtitle"></p>
+          </div>
+          <span class="leader-badge" hidden>Leader</span>
+        </div>
+        <div class="score-line">
+          <span class="score-value"></span>
+          <span class="score-context">team total to par</span>
+        </div>
+        <p class="overview-footer"></p>
+      </article>
+    </template>
+
+    <template id="team-card-template">
+      <article class="team-card">
+        <div class="team-card-header">
+          <div>
+            <p class="team-label"></p>
+            <h3 class="team-title"></h3>
+            <p class="team-subtitle"></p>
+          </div>
+          <div class="team-total"></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Player</th>
+                <th>Score</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </article>
+    </template>
+
+    <script src="./app.js" type="module"></script>
+  </body>
+</html>

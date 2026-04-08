@@ -1,0 +1,235 @@
+{
+  "event": {
+    "name": "Masters Tournament",
+    "par": 72,
+    "scoringRule": "Team score is the sum of all 10 players' current score to par. Lower is better. Players who have not started are counted as E (0).",
+    "refreshMinutes": 10,
+    "sourceUrl": "https://www.espn.com/golf/leaderboard/_/tournamentId/401811941",
+    "mode": "tee-times"
+  },
+  "meta": {
+    "fetchedAtUtc": "2026-04-07T23:08:54Z",
+    "leaderSlug": "team-scheffler",
+    "margin": 0
+  },
+  "teams": [
+    {
+      "slug": "team-scheffler",
+      "displayName": "Team Scheffler",
+      "subtitle": "Edit this in teams.json to your captain's name",
+      "totalScoreToPar": 0,
+      "totalScoreDisplay": "E",
+      "players": [
+        {
+          "name": "Scottie Scheffler",
+          "scoreToPar": 0,
+          "scoreDisplay": "E",
+          "status": "Tee time",
+          "detail": "Tee time 1:44 PM",
+          "teeTime": "1:44 PM",
+          "found": true,
+          "sourceLine": "Scottie Scheffler 1:44 PM"
+        },
+        {
+          "name": "Bryson DeChambeau",
+          "scoreToPar": 0,
+          "scoreDisplay": "E",
+          "status": "Tee time",
+          "detail": "Tee time 10:07 AM",
+          "teeTime": "10:07 AM",
+          "found": true,
+          "sourceLine": "Bryson DeChambeau 10:07 AM"
+        },
+        {
+          "name": "Xander Schauffele",
+          "scoreToPar": 0,
+          "scoreDisplay": "E",
+          "status": "Tee time",
+          "detail": "Tee time 10:07 AM",
+          "teeTime": "10:07 AM",
+          "found": true,
+          "sourceLine": "Xander Schauffele 10:07 AM"
+        },
+        {
+          "name": "Cameron Young",
+          "scoreToPar": 0,
+          "scoreDisplay": "E",
+          "status": "Tee time",
+          "detail": "Tee time 10:31 AM",
+          "teeTime": "10:31 AM",
+          "found": true,
+          "sourceLine": "Cameron Young 10:31 AM"
+        },
+        {
+          "name": "Collin Morikawa",
+          "scoreToPar": 0,
+          "scoreDisplay": "E",
+          "status": "Tee time",
+          "detail": "Tee time 10:19 AM",
+          "teeTime": "10:19 AM",
+          "found": true,
+          "sourceLine": "Collin Morikawa 10:19 AM"
+        },
+        {
+          "name": "Hideki Matsuyama",
+          "scoreToPar": 0,
+          "scoreDisplay": "E",
+          "status": "Tee time",
+          "detail": "Tee time 10:19 AM",
+          "teeTime": "10:19 AM",
+          "found": true,
+          "sourceLine": "Hideki Matsuyama 10:19 AM"
+        },
+        {
+          "name": "Brooks Koepka",
+          "scoreToPar": 0,
+          "scoreDisplay": "E",
+          "status": "Tee time",
+          "detail": "Tee time 1:20 PM",
+          "teeTime": "1:20 PM",
+          "found": true,
+          "sourceLine": "Brooks Koepka 1:20 PM"
+        },
+        {
+          "name": "Robert MacIntyre",
+          "scoreToPar": 0,
+          "scoreDisplay": "E",
+          "status": "Tee time",
+          "detail": "Tee time 1:44 PM",
+          "teeTime": "1:44 PM",
+          "found": true,
+          "sourceLine": "Robert MacIntyre 1:44 PM"
+        },
+        {
+          "name": "Viktor Hovland",
+          "scoreToPar": 0,
+          "scoreDisplay": "E",
+          "status": "Tee time",
+          "detail": "Tee time 10:43 AM",
+          "teeTime": "10:43 AM",
+          "found": true,
+          "sourceLine": "Viktor Hovland 10:43 AM"
+        },
+        {
+          "name": "Akshay Bhatia",
+          "scoreToPar": 0,
+          "scoreDisplay": "E",
+          "status": "Tee time",
+          "detail": "Tee time 9:55 AM",
+          "teeTime": "9:55 AM",
+          "found": true,
+          "sourceLine": "Akshay Bhatia 9:55 AM"
+        }
+      ]
+    },
+    {
+      "slug": "team-rory",
+      "displayName": "Team McIlroy",
+      "subtitle": "Edit this in teams.json to your captain's name",
+      "totalScoreToPar": 0,
+      "totalScoreDisplay": "E",
+      "players": [
+        {
+          "name": "Rory McIlroy",
+          "scoreToPar": 0,
+          "scoreDisplay": "E",
+          "status": "Tee time",
+          "detail": "Tee time 10:31 AM",
+          "teeTime": "10:31 AM",
+          "found": true,
+          "sourceLine": "Rory McIlroy 10:31 AM"
+        },
+        {
+          "name": "Ludvig \u00c5berg",
+          "scoreToPar": 0,
+          "scoreDisplay": "E",
+          "status": "Tee time",
+          "detail": "Tee time 1:08 PM",
+          "teeTime": "1:08 PM",
+          "found": true,
+          "sourceLine": "Ludvig Aberg 1:08 PM"
+        },
+        {
+          "name": "Tommy Fleetwood",
+          "scoreToPar": 0,
+          "scoreDisplay": "E",
+          "status": "Tee time",
+          "detail": "Tee time 9:55 AM",
+          "teeTime": "9:55 AM",
+          "found": true,
+          "sourceLine": "Tommy Fleetwood 9:55 AM"
+        },
+        {
+          "name": "Matt Fitzpatrick",
+          "scoreToPar": 0,
+          "scoreDisplay": "E",
+          "status": "Tee time",
+          "detail": "Tee time 10:07 AM",
+          "teeTime": "10:07 AM",
+          "found": true,
+          "sourceLine": "Matt Fitzpatrick 10:07 AM"
+        },
+        {
+          "name": "Justin Rose",
+          "scoreToPar": 0,
+          "scoreDisplay": "E",
+          "status": "Tee time",
+          "detail": "Tee time 1:20 PM",
+          "teeTime": "1:20 PM",
+          "found": true,
+          "sourceLine": "Justin Rose 1:20 PM"
+        },
+        {
+          "name": "Jon Rahm",
+          "scoreToPar": 0,
+          "scoreDisplay": "E",
+          "status": "Tee time",
+          "detail": "Tee time 1:08 PM",
+          "teeTime": "1:08 PM",
+          "found": true,
+          "sourceLine": "Jon Rahm 1:08 PM"
+        },
+        {
+          "name": "Min Woo Lee",
+          "scoreToPar": 0,
+          "scoreDisplay": "E",
+          "status": "Tee time",
+          "detail": "Tee time 12:15 PM",
+          "teeTime": "12:15 PM",
+          "found": true,
+          "sourceLine": "Min Woo Lee 12:15 PM"
+        },
+        {
+          "name": "Chris Gotterup",
+          "scoreToPar": 0,
+          "scoreDisplay": "E",
+          "status": "Tee time",
+          "detail": "Tee time 1:08 PM",
+          "teeTime": "1:08 PM",
+          "found": true,
+          "sourceLine": "Chris Gotterup 1:08 PM"
+        },
+        {
+          "name": "Justin Thomas",
+          "scoreToPar": 0,
+          "scoreDisplay": "E",
+          "status": "Tee time",
+          "detail": "Tee time 1:32 PM",
+          "teeTime": "1:32 PM",
+          "found": true,
+          "sourceLine": "Justin Thomas 1:32 PM"
+        },
+        {
+          "name": "Patrick Cantlay",
+          "scoreToPar": 0,
+          "scoreDisplay": "E",
+          "status": "Tee time",
+          "detail": "Tee time 10:43 AM",
+          "teeTime": "10:43 AM",
+          "found": true,
+          "sourceLine": "Patrick Cantlay 10:43 AM"
+        }
+      ]
+    }
+  ]
+}
