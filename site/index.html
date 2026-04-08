@@ -2,96 +2,35 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Annual NelSouth Masters Showdown</title>
-  <meta name="description" content="Annual NelSouth Masters Showdown scoreboard" />
-  <link rel="stylesheet" href="styles.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>NelSouth Masters Showdown</title>
+  <link rel="stylesheet" href="styles.css"/>
 </head>
 <body>
-  <div class="page-shell">
-    <header class="hero">
-      <div class="hero-inner">
-        <div class="tournament-mark">Masters Week</div>
-        <p class="eyebrow">NelSouth Golf Pool</p>
-        <h1>Annual NelSouth Masters Showdown</h1>
-        <p class="subhead">
-          Dave’s Duffers vs Brian’s Ballers
-        </p>
+  <div class="container">
+    <h1>Annual NelSouth Masters Showdown</h1>
 
-        <div class="hero-meta">
-          <div class="meta-pill">
-            <span class="meta-label">Format</span>
-            <span class="meta-value">10 Players Per Team</span>
-          </div>
-          <div class="meta-pill">
-            <span class="meta-label">Scoring</span>
-            <span class="meta-value">Combined Tournament Score</span>
-          </div>
-          <div class="meta-pill">
-            <span class="meta-label">Updated</span>
-            <span class="meta-value" id="lastUpdated">Loading…</span>
-          </div>
+    <div class="teams">
+      <div class="team" id="team1">
+        <div class="team-header">
+          <h2>Dave's Duffers</h2>
+          <span class="badge" id="badge1"></span>
         </div>
+        <div class="score" id="score1">--</div>
+        <div class="trash-talk" id="trash1"></div>
+        <div class="players" id="players1"></div>
       </div>
-    </header>
 
-    <main class="content">
-      <section class="scoreboard-stage">
-        <div class="scoreboard-topline">
-          <div class="topline-copy">
-            <span class="section-kicker">Live Team Standings</span>
-            <h2>Championship Board</h2>
-          </div>
-          <div class="leader-banner" id="leaderBanner">Loading standings…</div>
+      <div class="team" id="team2">
+        <div class="team-header">
+          <h2>Brian's Ballers</h2>
+          <span class="badge" id="badge2"></span>
         </div>
-
-        <div class="teams-grid">
-          <article class="team-card" id="team1Card">
-            <div class="team-card-header">
-              <div>
-                <p class="team-label">Team One</p>
-                <h3 id="team1Name">Dave’s Duffers</h3>
-              </div>
-              <div class="leader-tag" id="team1Tag">Contending</div>
-            </div>
-
-            <div class="team-score-wrap">
-              <div class="team-score" id="score1">—</div>
-              <div class="team-score-caption">Total Team Score</div>
-            </div>
-
-            <div class="roster-header">
-              <span>Roster</span>
-              <span>Status</span>
-            </div>
-
-            <div class="players-list" id="players1"></div>
-          </article>
-
-          <article class="team-card" id="team2Card">
-            <div class="team-card-header">
-              <div>
-                <p class="team-label">Team Two</p>
-                <h3 id="team2Name">Brian’s Ballers</h3>
-              </div>
-              <div class="leader-tag" id="team2Tag">Contending</div>
-            </div>
-
-            <div class="team-score-wrap">
-              <div class="team-score" id="score2">—</div>
-              <div class="team-score-caption">Total Team Score</div>
-            </div>
-
-            <div class="roster-header">
-              <span>Roster</span>
-              <span>Status</span>
-            </div>
-
-            <div class="players-list" id="players2"></div>
-          </article>
-        </div>
-      </section>
-    </main>
+        <div class="score" id="score2">--</div>
+        <div class="trash-talk" id="trash2"></div>
+        <div class="players" id="players2"></div>
+      </div>
+    </div>
   </div>
 
   <script src="app.js"></script>
