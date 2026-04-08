@@ -264,20 +264,44 @@ def parse_player_state(line: str, alias: str, canonical_name: str, par: int) -> 
 
 
 
-def load_config(config_path: Path) -> tuple[dict, list[TeamConfig]]:
-    raw = json.loads(config_path.read_text(encoding="utf-8"))
-    event = raw["event"]
-    teams: list[TeamConfig] = []
-    for team in raw["teams"]:
-        players = [PlayerConfig(name=player["name"], aliases=player.get("aliases", [player["name"]])) for player in team["players"]]
-        teams.append(
-            TeamConfig(
-                slug=team["slug"],
-                display_name=team["displayName"],
-                subtitle=team.get("subtitle", ""),
-                players=players,
-            )
-        )
+def load_config(config_path):
+    import json
+
+    with open(config_path, "r", encoding="utf-8") as f:
+        raw = json.load(f)
+
+    # Support original config format
+    if "event" in raw and "teams" in raw:
+        return raw["event"], raw["teams"]
+
+    # Support simplified format:
+    # {
+    #   "team1": {"name": "...", "players": [...]},
+    #   "team2": {"name": "...", "players": [...]}
+    # }
+    event = {
+        "name": "Masters Tournament",
+        "short_name": "Masters",
+        "year": 2026
+    }
+
+    teams = []
+
+    if "team1" in raw:
+        teams.append({
+            "name": raw["team1"].get("name", "Team 1"),
+            "players": raw["team1"].get("players", [])
+        })
+
+    if "team2" in raw:
+        teams.append({
+            "name": raw["team2"].get("name", "Team 2"),
+            "players": raw["team2"].get("players", [])
+        })
+
+    if not teams:
+        raise ValueError("teams.json must contain either {'event','teams'} or {'team1','team2'}")
+
     return event, teams
 
 
