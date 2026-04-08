@@ -26,10 +26,9 @@ html, body {
 
 body {
   color: var(--text-main);
-  background:
-    radial-gradient(circle at top left, rgba(200,162,74,0.10), transparent 30%),
+  radial-gradient(circle at top left, rgba(200,162,74,0.10), transparent 30%),
     radial-gradient(circle at bottom right, rgba(15,59,46,0.12), transparent 32%),
-    linear-gradient(180deg, #0c3227 0%, #114433 22%, #f3eedf 22%, #f7f2e8 100%);
+    linear-gradient(180deg, #0b3d2e 0%, #0b3d2e 35%, #f3eedf 35%, #f7f2e8 100%);
   font-family: Georgia, "Times New Roman", serif;
   min-height: 100vh;
 }
