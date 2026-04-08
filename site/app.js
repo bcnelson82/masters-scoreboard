@@ -1,120 +1,80 @@
-const TEAM_LABELS = {
-  team1: "Dave's Duffers",
-  team2: "Brian's Ballers"
-};
+const trashTalkLines = [
+  "Might be time to switch sports.",
+  "Somebody forgot how to putt.",
+  "This is getting hard to watch.",
+  "Masters called... they want better golf.",
+  "Currently sponsored by bogeys.",
+  "You guys practicing or competing?"
+];
 
-let previousScores = {
-  score1: null,
-  score2: null
-};
+async function loadScores() {
+  const res = await fetch('data/latest.json');
+  const data = await res.json();
 
-function formatScore(score) {
-  if (score === null || score === undefined || score === "") return "—";
-  const str = String(score).trim();
+  updateTeam(data.team1, 'score1', 'players1');
+  updateTeam(data.team2, 'score2', 'players2');
 
-  if (str === "E") return "E";
-  if (str.startsWith("-") || str.startsWith("+")) return str;
-
-  const num = Number(str);
-  if (!Number.isNaN(num)) {
-    if (num > 0) return `+${num}`;
-    if (num === 0) return "E";
-    return `${num}`;
-  }
-
-  return str;
+  applyGameLogic(data.team1.total, data.team2.total);
 }
 
-function scoreClass(score) {
-  const str = formatScore(score);
-  if (str === "E") return "even";
-  if (str.startsWith("-")) return "under";
-  if (str.startsWith("+")) return "over";
-  return "";
-}
+function updateTeam(team, scoreId, playersId) {
+  document.getElementById(scoreId).innerText = team.total;
 
-function parseNumericScore(score) {
-  const str = formatScore(score);
-  if (str === "E") return 0;
-  const num = Number(str);
-  return Number.isNaN(num) ? null : num;
-}
+  const container = document.getElementById(playersId);
+  container.innerHTML = '';
 
-function updateTimestamp() {
-  const el = document.getElementById("lastUpdated");
-  const now = new Date();
-  el.textContent = now.toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit"
+  team.players.forEach(p => {
+    const div = document.createElement('div');
+    div.className = 'player';
+
+    div.innerHTML = `
+      <div class="player-name">${p.name}</div>
+      <div>
+        <div class="player-score">${p.score}</div>
+        <div class="status">${p.status}</div>
+      </div>
+    `;
+
+    container.appendChild(div);
   });
 }
 
-function animateScore(id, nextValue) {
-  const el = document.getElementById(id);
-  if (!el) return;
+function applyGameLogic(score1, score2) {
+  const team1 = document.getElementById('team1');
+  const team2 = document.getElementById('team2');
 
-  if (previousScores[id] !== null && previousScores[id] !== nextValue) {
-    el.classList.remove("flash");
-    void el.offsetWidth;
-    el.classList.add("flash");
-    setTimeout(() => el.classList.remove("flash"), 320);
+  const badge1 = document.getElementById('badge1');
+  const badge2 = document.getElementById('badge2');
+
+  const trash1 = document.getElementById('trash1');
+  const trash2 = document.getElementById('trash2');
+
+  team1.classList.remove('leading');
+  team2.classList.remove('leading');
+  badge1.style.display = 'none';
+  badge2.style.display = 'none';
+  trash1.innerText = '';
+  trash2.innerText = '';
+
+  if (score1 < score2) {
+    team1.classList.add('leading');
+    badge1.style.display = 'inline-block';
+    badge1.innerText = 'LEADING';
+    trash2.innerText = randomTrash();
+  } else if (score2 < score1) {
+    team2.classList.add('leading');
+    badge2.style.display = 'inline-block';
+    badge2.innerText = 'LEADING';
+    trash1.innerText = randomTrash();
+  } else {
+    trash1.innerText = "Too close to call.";
+    trash2.innerText = "Too close to call.";
   }
-
-  previousScores[id] = nextValue;
-  el.textContent = formatScore(nextValue);
 }
 
-function buildPlayerRow(player) {
-  const row = document.createElement("div");
-  row.className = "player-row";
-
-  const score = formatScore(player.score);
-  const scorePillClass = scoreClass(player.score);
-
-  row.innerHTML = `
-    <div class="player-main">
-      <div class="player-name-line">
-        <div class="player-name">${player.name || "Unknown Player"}</div>
-        <div class="score-pill ${scorePillClass}">${score}</div>
-      </div>
-      <div class="player-status">
-        <strong>Status:</strong> ${player.status || "No live status"}
-      </div>
-    </div>
-    <div class="player-side">
-      <div class="status-chip">${player.status || "Waiting"}</div>
-    </div>
-  `;
-
-  return row;
+function randomTrash() {
+  return trashTalkLines[Math.floor(Math.random() * trashTalkLines.length)];
 }
 
-function sortPlayers(players = []) {
-  return [...players].sort((a, b) => {
-    const aNum = parseNumericScore(a.score);
-    const bNum = parseNumericScore(b.score);
-
-    if (aNum === null && bNum === null) return (a.name || "").localeCompare(b.name || "");
-    if (aNum === null) return 1;
-    if (bNum === null) return -1;
-    if (aNum !== bNum) return aNum - bNum;
-
-    return (a.name || "").localeCompare(b.name || "");
-  });
-}
-
-function renderTeam(team, scoreId, playersId, fallbackName) {
-  const scoreValue = team?.total ?? team?.score ?? "—";
-  animateScore(scoreId, scoreValue);
-
-  const list = document.getElementById(playersId);
-  list.innerHTML = "";
-
-  const players = sortPlayers(team?.players || []);
-  if (!players.length) {
-    const empty = document.createElement("div");
-    empty.className = "empty-state";
-    empty.textContent = "No player data available yet.";
-    list.appendChild(empty);
+loadScores();
+setInterval(loadScores, 60000);
