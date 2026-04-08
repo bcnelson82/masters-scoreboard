@@ -3,34 +3,120 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>NelSouth Masters Showdown</title>
+  <title>Annual NelSouth Masters Showdown</title>
   <link rel="stylesheet" href="styles.css"/>
 </head>
 <body>
-  <div class="container">
-    <h1>Annual NelSouth Masters Showdown</h1>
+  <div class="page-shell">
+    <header class="hero">
+      <div class="hero-topline">Tradition unlike any office pool</div>
+      <h1>Annual NelSouth Masters Showdown</h1>
+      <p class="hero-subtitle">
+        Two captains. Twenty golfers. One glorious excuse to talk trash.
+      </p>
 
-    <div class="teams">
-      <div class="team" id="team1">
-        <div class="team-header">
-          <h2>Dave's Duffers</h2>
-          <span class="badge" id="badge1"></span>
+      <div class="hero-callouts">
+        <div class="callout">
+          <span class="callout-label">Tournament</span>
+          <span class="callout-value">Masters Week</span>
         </div>
-        <div class="score" id="score1">--</div>
-        <div class="trash-talk" id="trash1"></div>
-        <div class="players" id="players1"></div>
+        <div class="callout">
+          <span class="callout-label">Format</span>
+          <span class="callout-value">10 vs 10</span>
+        </div>
+        <div class="callout">
+          <span class="callout-label">Status</span>
+          <span class="callout-value" id="event-status">Live Scoring</span>
+        </div>
       </div>
+    </header>
 
-      <div class="team" id="team2">
-        <div class="team-header">
-          <h2>Brian's Ballers</h2>
-          <span class="badge" id="badge2"></span>
-        </div>
-        <div class="score" id="score2">--</div>
-        <div class="trash-talk" id="trash2"></div>
-        <div class="players" id="players2"></div>
-      </div>
-    </div>
+    <main class="container">
+      <section class="versus-bar">
+        <div class="versus-line"></div>
+        <div class="versus-pill">Head-to-Head</div>
+        <div class="versus-line"></div>
+      </section>
+
+      <section class="teams" id="teams">
+        <article class="team-card" id="team1">
+          <div class="team-accent"></div>
+
+          <div class="team-header">
+            <div>
+              <div class="team-kicker">Captain's Side</div>
+              <h2>Dave's Duffers</h2>
+            </div>
+            <div class="badge" id="badge1"></div>
+          </div>
+
+          <div class="team-summary">
+            <div>
+              <div class="summary-label">Team Total</div>
+              <div class="score" id="score1">--</div>
+            </div>
+            <div class="mini-stat">
+              <div class="summary-label">Top Performer</div>
+              <div class="mini-stat-value" id="top1">—</div>
+            </div>
+          </div>
+
+          <div class="talk-banner" id="trash1"></div>
+
+          <div class="team-meta">
+            <span class="meta-chip">Augusta watchlist</span>
+            <span class="meta-chip" id="players-count-1">10 players</span>
+          </div>
+
+          <div class="players-header">
+            <span>Player</span>
+            <span>Score / Status</span>
+          </div>
+          <div class="players" id="players1"></div>
+        </article>
+
+        <article class="team-card" id="team2">
+          <div class="team-accent"></div>
+
+          <div class="team-header">
+            <div>
+              <div class="team-kicker">Captain's Side</div>
+              <h2>Brian's Ballers</h2>
+            </div>
+            <div class="badge" id="badge2"></div>
+          </div>
+
+          <div class="team-summary">
+            <div>
+              <div class="summary-label">Team Total</div>
+              <div class="score" id="score2">--</div>
+            </div>
+            <div class="mini-stat">
+              <div class="summary-label">Top Performer</div>
+              <div class="mini-stat-value" id="top2">—</div>
+            </div>
+          </div>
+
+          <div class="talk-banner" id="trash2"></div>
+
+          <div class="team-meta">
+            <span class="meta-chip">Green jacket energy</span>
+            <span class="meta-chip" id="players-count-2">10 players</span>
+          </div>
+
+          <div class="players-header">
+            <span>Player</span>
+            <span>Score / Status</span>
+          </div>
+          <div class="players" id="players2"></div>
+        </article>
+      </section>
+
+      <section class="footer-strip">
+        <div class="footer-note">Scoring updates refresh automatically.</div>
+        <div class="footer-note" id="updated-at">Waiting for latest data…</div>
+      </section>
+    </main>
   </div>
 
   <script src="app.js"></script>
