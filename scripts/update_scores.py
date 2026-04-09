@@ -1,12 +1,4 @@
 #!/usr/bin/env python3
-"""Build the latest team scoreboard JSON for the Masters landing page.
-
-Default source: ESPN Masters leaderboard page.
-
-The parser intentionally works from page text rather than fragile CSS selectors so
-it remains usable if ESPN changes its markup. It looks for either a leaderboard
-section ("POS PLAYER SCORE") or a tee-time section ("PLAYER TEE TIME").
-"""
 from __future__ import annotations
 
 import argparse
@@ -45,7 +37,6 @@ class TeamConfig:
     players: list[PlayerConfig]
 
 
-
 def normalize_text(value: str) -> str:
     decomposed = unicodedata.normalize("NFKD", value)
     without_marks = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
@@ -56,14 +47,12 @@ def normalize_text(value: str) -> str:
     return lowered.strip()
 
 
-
 def score_display(value: int) -> str:
     if value == 0:
         return "E"
     if value > 0:
         return f"+{value}"
     return str(value)
-
 
 
 def read_source(url: str | None, input_file: Path | None) -> str:
@@ -73,14 +62,30 @@ def read_source(url: str | None, input_file: Path | None) -> str:
     if not url:
         raise ValueError("A URL is required when --input-file is not provided.")
 
-    response = requests.get(
-        url,
-        headers={"User-Agent": USER_AGENT},
-        timeout=DEFAULT_TIMEOUT,
-    )
-    response.raise_for_status()
-    return response.text
+    # Try rendered browser first
+    try:
+        from playwright.sync_api import sync_playwright
 
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page(
+                user_agent=USER_AGENT,
+                viewport={"width": 1440, "height": 2200},
+            )
+            page.goto(url, wait_until="domcontentloaded", timeout=60000)
+            page.wait_for_timeout(8000)
+            html = page.content()
+            browser.close()
+            return html
+    except Exception:
+        # Fallback to plain HTTP
+        response = requests.get(
+            url,
+            headers={"User-Agent": USER_AGENT},
+            timeout=DEFAULT_TIMEOUT,
+        )
+        response.raise_for_status()
+        return response.text
 
 
 def html_to_lines(raw_text: str) -> list[str]:
@@ -94,28 +99,27 @@ def html_to_lines(raw_text: str) -> list[str]:
     return lines
 
 
+def choose_score_section(lines: list[str]) -> tuple[list[str], str]:
+    joined = "\n".join(lines)
+    score_pattern = re.compile(r"\b(?:E|[+-]\d+)\b")
 
-def choose_score_section(lines):
-    # Try to find a section that actually contains score patterns
-    score_pattern = re.compile(r"[+-]\d+|E")
-
-    best_section = []
+    best_section: list[str] = []
     best_count = 0
 
     for i in range(len(lines)):
-        window = lines[i:i+50]
-
+        window = lines[i:i + 80]
         score_hits = sum(1 for line in window if score_pattern.search(line))
-
         if score_hits > best_count:
             best_count = score_hits
             best_section = window
 
-    if best_count > 5:
+    if best_count >= 3:
         return best_section, "leaderboard"
 
-    return lines, "unknown"
+    if "tee time" in joined.lower():
+        return lines, "tee-times"
 
+    return lines, "unknown"
 
 
 def find_player_line(section: Iterable[tuple[str, str]], aliases: list[str]) -> tuple[str, str] | None:
@@ -128,20 +132,18 @@ def find_player_line(section: Iterable[tuple[str, str]], aliases: list[str]) -> 
     return None
 
 
-
 def extract_line_after_alias(line: str, alias: str) -> str:
     normalized = normalize_text(line)
     idx = normalized.find(alias)
     if idx == -1:
         return normalized
-    return normalized[idx + len(alias) :].strip()
-
+    return normalized[idx + len(alias):].strip()
 
 
 def parse_completed_status(tokens: list[str], start_index: int, par: int) -> int | None:
     round_scores: list[int] = []
     total_strokes: int | None = None
-    for token in tokens[start_index + 1 :]:
+    for token in tokens[start_index + 1:]:
         if not re.fullmatch(r"\d+", token):
             continue
         value = int(token)
@@ -156,39 +158,42 @@ def parse_completed_status(tokens: list[str], start_index: int, par: int) -> int
     return total_strokes - par * len(round_scores)
 
 
-
 def derive_detail(tokens: list[str], score_index: int) -> str:
-    trailing = tokens[score_index + 1 :]
-    if "f" in trailing:
+    trailing = tokens[score_index + 1:]
+
+    if not trailing:
+        return "Live"
+
+    upper_trailing = [t.upper() for t in trailing]
+
+    if "F" in upper_trailing or "FINAL" in upper_trailing:
         return "Final"
 
-    round_scores = [
-        int(token)
-        for token in trailing
-        if re.fullmatch(r"\d+", token) and 50 <= int(token) <= 90
+    thru_candidates = [
+        token for token in trailing
+        if re.fullmatch(r"\d{1,2}", token) and 1 <= int(token) <= 18
     ]
-    totals = [
-        int(token)
-        for token in trailing
-        if re.fullmatch(r"\d+", token) and 100 <= int(token) <= 400
-    ]
-    if len(round_scores) >= 4 and totals:
-        return "Final"
-    if len(round_scores) >= 2 and totals and not any(
-        re.fullmatch(r"\d{1,2}", token) and 1 <= int(token) <= 18 for token in trailing
-    ):
-        return "Round complete"
-
-    thru_candidates = [token for token in trailing if re.fullmatch(r"\d{1,2}", token) and 1 <= int(token) <= 18]
     if thru_candidates:
         return f"Thru {thru_candidates[0]}"
 
-    if trailing:
-        first = trailing[0].upper()
-        if first in STATUS_TOKENS:
-            return first
-    return "Live"
+    if upper_trailing[0] in STATUS_TOKENS:
+        return upper_trailing[0]
 
+    round_scores = [
+        int(token) for token in trailing
+        if re.fullmatch(r"\d+", token) and 50 <= int(token) <= 90
+    ]
+    totals = [
+        int(token) for token in trailing
+        if re.fullmatch(r"\d+", token) and 100 <= int(token) <= 400
+    ]
+
+    if len(round_scores) >= 4 and totals:
+        return "Final"
+    if len(round_scores) >= 1 and totals:
+        return "Round complete"
+
+    return "Live"
 
 
 def parse_player_state(line: str, alias: str, canonical_name: str, par: int) -> dict:
@@ -208,12 +213,7 @@ def parse_player_state(line: str, alias: str, canonical_name: str, par: int) -> 
 
     tail = extract_line_after_alias(line, alias)
 
-    # ESPN sometimes concatenates SCORE and TODAY, e.g. "-3-3 6--------20"
-    # Insert a space between adjacent signed score tokens so parsing can work.
     tail = re.sub(r"([+-]\d+)([+-]\d+)", r"\1 \2", tail)
-
-    # ESPN also collapses trailing columns together with dashes.
-    # Convert long dash runs to spaces so THRU / totals can be tokenized.
     tail = re.sub(r"-{2,}", " ", tail)
 
     cleaned_tail = re.sub(r"[^a-zA-Z0-9:+\-]+", " ", tail)
@@ -221,6 +221,7 @@ def parse_player_state(line: str, alias: str, canonical_name: str, par: int) -> 
 
     score_index: int | None = None
     score_token: str | None = None
+
     for idx, token in enumerate(tokens):
         token_upper = token.upper()
         if token_upper == "E" or re.fullmatch(r"[+-]\d+", token_upper) or token_upper in STATUS_TOKENS:
@@ -282,13 +283,19 @@ def parse_player_state(line: str, alias: str, canonical_name: str, par: int) -> 
     }
 
 
-
 def load_config(config_path: Path) -> tuple[dict, list[TeamConfig]]:
     raw = json.loads(config_path.read_text(encoding="utf-8"))
     event = raw["event"]
     teams: list[TeamConfig] = []
+
     for team in raw["teams"]:
-        players = [PlayerConfig(name=player["name"], aliases=player.get("aliases", [player["name"]])) for player in team["players"]]
+        players = [
+            PlayerConfig(
+                name=player["name"],
+                aliases=player.get("aliases", [player["name"]]),
+            )
+            for player in team["players"]
+        ]
         teams.append(
             TeamConfig(
                 slug=team["slug"],
@@ -300,7 +307,6 @@ def load_config(config_path: Path) -> tuple[dict, list[TeamConfig]]:
     return event, teams
 
 
-
 def build_output(lines: list[str], mode: str, event: dict, teams: list[TeamConfig], source_url: str | None) -> dict:
     normalized_section = [(line, normalize_text(line)) for line in lines]
     rendered_teams: list[dict] = []
@@ -308,6 +314,7 @@ def build_output(lines: list[str], mode: str, event: dict, teams: list[TeamConfi
     for team in teams:
         rendered_players: list[dict] = []
         total = 0
+
         for player in team.players:
             found = find_player_line(normalized_section, [player.name, *player.aliases])
             if found is None:
@@ -324,6 +331,7 @@ def build_output(lines: list[str], mode: str, event: dict, teams: list[TeamConfi
             else:
                 original_line, matched_alias = found
                 state = parse_player_state(original_line, matched_alias, player.name, int(event["par"]))
+
             total += int(state["scoreToPar"])
             rendered_players.append(state)
 
@@ -338,6 +346,14 @@ def build_output(lines: list[str], mode: str, event: dict, teams: list[TeamConfi
             }
         )
 
+    all_found = any(
+        player["found"]
+        for team in rendered_teams
+        for player in team["players"]
+    )
+    if not all_found:
+        raise ValueError("No player rows were parsed from the rendered page.")
+
     sorted_totals = sorted(rendered_teams, key=lambda team: team["totalScoreToPar"])
     leader_slug = sorted_totals[0]["slug"] if sorted_totals else None
     margin = None
@@ -345,6 +361,7 @@ def build_output(lines: list[str], mode: str, event: dict, teams: list[TeamConfi
         margin = sorted_totals[1]["totalScoreToPar"] - sorted_totals[0]["totalScoreToPar"]
 
     fetched_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
     return {
         "event": {
             "name": event["name"],
@@ -363,7 +380,6 @@ def build_output(lines: list[str], mode: str, event: dict, teams: list[TeamConfi
     }
 
 
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate landing-page JSON from the Masters leaderboard.")
     parser.add_argument("--config", default="teams.json", help="Path to teams.json")
@@ -371,7 +387,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--url", default=None, help="Leaderboard page URL")
     parser.add_argument("--input-file", default=None, help="Optional local HTML or text file for testing")
     return parser.parse_args()
-
 
 
 def main() -> int:
@@ -385,16 +400,15 @@ def main() -> int:
 
     try:
         raw_text = read_source(source_url, input_file)
-        Path("site/data/raw_source_debug.html").write_text(raw_text, encoding="utf-8")
         lines = html_to_lines(raw_text)
         section, mode = choose_score_section(lines)
-        if mode == "tee-times":
-            print("ERROR: Source returned tee times instead of live leaderboard data.", file=sys.stderr)
+
+        if mode == "unknown":
+            print("ERROR: Could not detect leaderboard section.", file=sys.stderr)
             return 1
-        Path("site/data/raw_lines_debug.txt").write_text("\n".join(lines[:400]), encoding="utf-8")
-        print(f"DEBUG mode={mode}")
+
         output = build_output(section, mode, event, teams, source_url)
-    except Exception as exc:  # pragma: no cover - keeps workflow readable on failure
+    except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
 
