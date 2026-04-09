@@ -5,8 +5,10 @@ env:
 
 on:
   workflow_dispatch:
+  repository_dispatch:
+    types: [scoreboard_update]
   schedule:
-    - cron: "7,17,27,37,47,57 * * * *"
+  - cron: "2,7,12,17,22,27,32,37,42,47,52,57 * * * *"
 
 permissions:
   contents: read
