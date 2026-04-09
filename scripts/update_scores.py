@@ -375,8 +375,14 @@ def main() -> int:
 
     try:
         raw_text = read_source(source_url, input_file)
+        Path("site/data/raw_source_debug.html").write_text(raw_text, encoding="utf-8")
         lines = html_to_lines(raw_text)
         section, mode = choose_score_section(lines)
+        if mode == "tee-times":
+            print("ERROR: Source returned tee times instead of live leaderboard data.", file=sys.stderr)
+            return 1
+        Path("site/data/raw_lines_debug.txt").write_text("\n".join(lines[:400]), encoding="utf-8")
+        print(f"DEBUG mode={mode}")
         output = build_output(section, mode, event, teams, source_url)
     except Exception as exc:  # pragma: no cover - keeps workflow readable on failure
         print(f"ERROR: {exc}", file=sys.stderr)
