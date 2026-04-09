@@ -105,7 +105,13 @@ def html_to_lines(raw_text: str) -> list[str]:
 def choose_score_section(lines: list[str]) -> tuple[list[str], str]:
     for i, line in enumerate(lines):
         if "POS PLAYER SCORE TODAY THRU" in line.upper():
-            return lines[i + 1 : i + 260], "leaderboard"
+            section = []
+            for row in lines[i + 1:]:
+                upper = row.upper()
+                if upper.startswith("GLOSSARY") or upper.startswith("LATEST GOLF VIDEOS"):
+                    break
+                section.append(row)
+            return section, "leaderboard"
 
     joined = "\n".join(lines).lower()
     if "tee time" in joined:
