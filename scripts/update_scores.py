@@ -197,7 +197,16 @@ def parse_player_state(line: str, alias: str, canonical_name: str, par: int) -> 
         }
 
     tail = extract_line_after_alias(line, alias)
-    cleaned_tail = re.sub(r"[^a-z0-9:+\-]+", " ", tail)
+
+    # ESPN sometimes concatenates SCORE and TODAY, e.g. "-3-3 6--------20"
+    # Insert a space between adjacent signed score tokens so parsing can work.
+    tail = re.sub(r"([+-]\d+)([+-]\d+)", r"\1 \2", tail)
+
+    # ESPN also collapses trailing columns together with dashes.
+    # Convert long dash runs to spaces so THRU / totals can be tokenized.
+    tail = re.sub(r"-{2,}", " ", tail)
+
+    cleaned_tail = re.sub(r"[^a-zA-Z0-9:+\-]+", " ", tail)
     tokens = [token for token in cleaned_tail.split() if token]
 
     score_index: int | None = None
