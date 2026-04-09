@@ -13,7 +13,7 @@ function scoreToNumber(score) {
   if (score === null || score === undefined) return 9999;
   const s = String(score).trim().toUpperCase();
   if (s === "E") return 0;
-  if (s === "--" || s === "CUT" || s === "WD") return 9999;
+  if (s === "--" || s === "CUT" || s === "WD" || s === "DQ" || s === "MDF" || s === "DNS") return 9999;
   const n = Number(s);
   return Number.isNaN(n) ? 9999 : n;
 }
@@ -21,7 +21,7 @@ function scoreToNumber(score) {
 function formatScore(score) {
   if (score === null || score === undefined) return "--";
   const s = String(score).trim().toUpperCase();
-  if (s === "E" || s === "CUT" || s === "WD" || s === "--") return s;
+  if (s === "E" || s === "CUT" || s === "WD" || s === "DQ" || s === "MDF" || s === "DNS" || s === "--") return s;
   const n = Number(s);
   if (Number.isNaN(n)) return s;
   if (n > 0) return `+${n}`;
@@ -58,6 +58,25 @@ function pulseScore(el) {
   void el.offsetWidth;
   el.classList.add("pulse");
   setTimeout(() => el.classList.remove("pulse"), 240);
+}
+
+function normalizePlayer(p) {
+  return {
+    name: p.name,
+    score: p.scoreDisplay,
+    numericScore: p.scoreToPar,
+    status: p.detail || p.status || "Waiting to tee off"
+  };
+}
+
+function normalizeTeam(team) {
+  const players = (team.players || []).map(normalizePlayer);
+  return {
+    name: team.displayName,
+    total: team.totalScoreDisplay,
+    numericTotal: team.totalScoreToPar,
+    players
+  };
 }
 
 function renderTeam(team, ids) {
@@ -114,8 +133,8 @@ function applyGameLogic(team1, team2) {
   const trash1 = document.getElementById("trash1");
   const trash2 = document.getElementById("trash2");
 
-  const s1 = scoreToNumber(team1.total);
-  const s2 = scoreToNumber(team2.total);
+  const s1 = team1.numericTotal;
+  const s2 = team2.numericTotal;
 
   card1.classList.remove("leading", "trailing");
   card2.classList.remove("leading", "trailing");
@@ -142,20 +161,20 @@ function applyGameLogic(team1, team2) {
   }
 }
 
-function detectEventStatus(data) {
+function detectEventStatus(team1, team2) {
   const allPlayers = [
-    ...(data.team1?.players || []),
-    ...(data.team2?.players || [])
+    ...(team1.players || []),
+    ...(team2.players || [])
   ];
 
   const statuses = allPlayers.map(p => String(p.status || "").trim()).filter(Boolean);
 
   if (!statuses.length) return "Live Scoring";
 
-  const live = statuses.find(s => /thru|r\d/i.test(s));
+  const live = statuses.find(s => /thru|live|round|tee time/i.test(s));
   if (live) return live;
 
-  const complete = statuses.find(s => /complete|final|finished/i.test(s));
+  const complete = statuses.find(s => /complete|final|finished|cut|wd|dq/i.test(s));
   if (complete) return complete;
 
   return "Live Scoring";
@@ -166,26 +185,30 @@ async function loadScores() {
     const res = await fetch("data/latest.json", { cache: "no-store" });
     const data = await res.json();
 
-    renderTeam(data.team1, {
+    const team1 = normalizeTeam(data.teams[0]);
+    const team2 = normalizeTeam(data.teams[1]);
+
+    renderTeam(team1, {
       score: "score1",
       players: "players1",
       top: "top1",
       count: "players-count-1"
     });
 
-    renderTeam(data.team2, {
+    renderTeam(team2, {
       score: "score2",
       players: "players2",
       top: "top2",
       count: "players-count-2"
     });
 
-    applyGameLogic(data.team1, data.team2);
+    applyGameLogic(team1, team2);
 
     document.getElementById("updated-at").textContent =
-      safeTimestamp(data.updated_at || data.updatedAt || data.timestamp);
+      safeTimestamp(data.meta?.fetchedAtUtc);
 
-    document.getElementById("event-status").textContent = detectEventStatus(data);
+    document.getElementById("event-status").textContent =
+      detectEventStatus(team1, team2);
   } catch (err) {
     document.getElementById("updated-at").textContent =
       "Could not load latest scoring data";
