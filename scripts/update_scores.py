@@ -97,14 +97,21 @@ def html_to_lines(raw_text: str) -> list[str]:
 
 
 def choose_score_section(lines: list[str]) -> tuple[list[str], str]:
+    # Look specifically for the table header
+    for i, line in enumerate(lines):
+        if "POS PLAYER SCORE TODAY THRU" in line.upper():
+            return lines[i:i+400], "leaderboard"
+
+    # fallback (old logic)
     score_pattern = re.compile(r"\b(?:E|[+-]\d+)\b")
 
-    best_section: list[str] = []
+    best_section = []
     best_count = 0
 
     for i in range(len(lines)):
         window = lines[i:i + 80]
         score_hits = sum(1 for line in window if score_pattern.search(line))
+
         if score_hits > best_count:
             best_count = score_hits
             best_section = window
