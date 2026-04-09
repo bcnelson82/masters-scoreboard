@@ -1,6 +1,6 @@
 # Masters Team Scoreboard
 
-A deploy-ready static landing page that compares two Masters teams and updates itself on a schedule.
+A deploy-ready static landing page that compares two Masters Teams and updates itself on a schedule.
 
 ## What is in this repo
 
