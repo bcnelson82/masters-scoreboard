@@ -8,7 +8,6 @@ import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable
 
 import requests
 from bs4 import BeautifulSoup
@@ -54,6 +53,13 @@ def score_display(value: int) -> str:
     return str(value)
 
 
+def make_short_alias(full_name: str) -> str:
+    parts = full_name.split()
+    if len(parts) < 2:
+        return full_name
+    return f"{parts[0][0]}. {' '.join(parts[1:])}"
+
+
 def read_source(url: str | None, input_file: Path | None) -> str:
     if input_file is not None:
         return input_file.read_text(encoding="utf-8")
@@ -97,27 +103,9 @@ def html_to_lines(raw_text: str) -> list[str]:
 
 
 def choose_score_section(lines: list[str]) -> tuple[list[str], str]:
-    # Look specifically for the table header
     for i, line in enumerate(lines):
         if "POS PLAYER SCORE TODAY THRU" in line.upper():
-            return lines[i:i+400], "leaderboard"
-
-    # fallback (old logic)
-    score_pattern = re.compile(r"\b(?:E|[+-]\d+)\b")
-
-    best_section = []
-    best_count = 0
-
-    for i in range(len(lines)):
-        window = lines[i:i + 80]
-        score_hits = sum(1 for line in window if score_pattern.search(line))
-
-        if score_hits > best_count:
-            best_count = score_hits
-            best_section = window
-
-    if best_count >= 3:
-        return best_section, "leaderboard"
+            return lines[i + 1 : i + 260], "leaderboard"
 
     joined = "\n".join(lines).lower()
     if "tee time" in joined:
@@ -126,87 +114,112 @@ def choose_score_section(lines: list[str]) -> tuple[list[str], str]:
     return lines, "unknown"
 
 
-def find_player_line(section: Iterable[tuple[str, str]], aliases: list[str]) -> tuple[str, str] | None:
-    normalized_aliases = [normalize_text(alias) for alias in aliases]
-    for original_line, normalized_line in section:
-        padded = f" {normalized_line} "
+def is_position_line(line: str) -> bool:
+    return bool(re.fullmatch(r"(T?\d+|[-])\.?", line.strip()))
+
+
+def is_score_block_line(line: str) -> bool:
+    line = line.strip()
+    if not line:
+        return False
+    if re.match(r"^(?:E|[+-]\d+|-)\b", line):
+        return True
+    if re.search(r"\b(?:F|\d{1,2}:\d{2}\s*(?:AM|PM)|\d{1,2})\b", line):
+        return True
+    return False
+
+
+def build_leaderboard_rows(lines: list[str]) -> list[str]:
+    rows: list[str] = []
+    i = 0
+
+    while i < len(lines):
+        line = lines[i].strip()
+
+        if line.upper().startswith("GLOSSARY") or line.upper().startswith("LATEST GOLF VIDEOS"):
+            break
+
+        if is_position_line(line):
+            if i + 2 < len(lines):
+                name_line = lines[i + 1].strip()
+                stats_line = lines[i + 2].strip()
+
+                if name_line and stats_line and is_score_block_line(stats_line):
+                    rows.append(f"{name_line} {stats_line}")
+                    i += 3
+                    continue
+
+        i += 1
+
+    return rows
+
+
+def find_player_row(rows: list[tuple[str, str]], aliases: list[str]) -> tuple[str, str] | None:
+    normalized_aliases = [normalize_text(a) for a in aliases]
+    for original_row, normalized_row in rows:
+        padded = f" {normalized_row} "
         for alias in normalized_aliases:
             if f" {alias} " in padded:
-                return original_line, alias
+                return original_row, alias
     return None
 
 
-def extract_line_after_alias(line: str, alias: str) -> str:
-    normalized = normalize_text(line)
+def extract_tail_after_alias(row: str, alias: str) -> str:
+    normalized = normalize_text(row)
     idx = normalized.find(alias)
     if idx == -1:
         return normalized
     return normalized[idx + len(alias):].strip()
 
 
-def parse_completed_status(tokens: list[str], start_index: int, par: int) -> int | None:
-    round_scores: list[int] = []
-    total_strokes: int | None = None
-
-    for token in tokens[start_index + 1:]:
-        if not re.fullmatch(r"\d+", token):
-            continue
-        value = int(token)
-        if 50 <= value <= 90 and total_strokes is None:
-            round_scores.append(value)
-            continue
-        if 100 <= value <= 400 and total_strokes is None:
-            total_strokes = value
-            break
-
-    if total_strokes is None or not round_scores:
-        return None
-
-    return total_strokes - par * len(round_scores)
-
-
 def derive_detail(tokens: list[str], score_index: int) -> str:
-    trailing = tokens[score_index + 1:]
+    trailing = tokens[score_index + 1 :]
 
     if not trailing:
         return "Live"
 
     upper_trailing = [t.upper() for t in trailing]
 
-    if "F" in upper_trailing or "FINAL" in upper_trailing:
+    if "F" in upper_trailing:
         return "Final"
 
-    thru_candidates = [
-        token for token in trailing
-        if re.fullmatch(r"\d{1,2}", token) and 1 <= int(token) <= 18
-    ]
-    if thru_candidates:
-        return f"Thru {thru_candidates[0]}"
+    for token in trailing:
+        if re.fullmatch(r"\d{1,2}", token):
+            value = int(token)
+            if 1 <= value <= 18:
+                return f"Thru {value}"
 
     if upper_trailing[0] in STATUS_TOKENS:
         return upper_trailing[0]
 
-    round_scores = [
-        int(token) for token in trailing
-        if re.fullmatch(r"\d+", token) and 50 <= int(token) <= 90
-    ]
-    totals = [
-        int(token) for token in trailing
-        if re.fullmatch(r"\d+", token) and 100 <= int(token) <= 400
-    ]
-
-    if len(round_scores) >= 4 and totals:
-        return "Final"
-    if len(round_scores) >= 1 and totals:
-        return "Round complete"
+    if re.fullmatch(r"\d{1,2}:\d{2}", trailing[0]) and len(trailing) > 1:
+        ampm = trailing[1].upper()
+        if ampm in {"AM", "PM"}:
+            return f"Tee time {trailing[0]} {ampm}"
 
     return "Live"
 
 
-def parse_player_state(line: str, alias: str, canonical_name: str, par: int) -> dict:
-    tee_match = re.search(r"\b\d{1,2}:\d{2}\s*(?:AM|PM)\b", line, re.IGNORECASE)
-    if tee_match:
-        tee_time = tee_match.group(0).upper()
+def parse_player_row(row: str, alias: str, canonical_name: str) -> dict:
+    tail = extract_tail_after_alias(row, alias)
+    cleaned_tail = re.sub(r"[^a-zA-Z0-9:+\-]+", " ", tail)
+    tokens = [token for token in cleaned_tail.split() if token]
+
+    if not tokens:
+        return {
+            "name": canonical_name,
+            "scoreToPar": 0,
+            "scoreDisplay": "E",
+            "status": "Not found",
+            "detail": "Player row was not parsed.",
+            "teeTime": None,
+            "found": False,
+            "sourceLine": row,
+        }
+
+    # tee time rows look like "- - 5:44 PM -- -- -- -- --"
+    if len(tokens) >= 4 and tokens[0] == "-" and tokens[1] == "-" and re.fullmatch(r"\d{1,2}:\d{2}", tokens[2]):
+        tee_time = f"{tokens[2]} {tokens[3].upper()}"
         return {
             "name": canonical_name,
             "scoreToPar": 0,
@@ -215,18 +228,11 @@ def parse_player_state(line: str, alias: str, canonical_name: str, par: int) -> 
             "detail": f"Tee time {tee_time}",
             "teeTime": tee_time,
             "found": True,
-            "sourceLine": line,
+            "sourceLine": row,
         }
 
-    tail = extract_line_after_alias(line, alias)
-    tail = re.sub(r"([+-]\d+)([+-]\d+)", r"\1 \2", tail)
-    tail = re.sub(r"-{2,}", " ", tail)
-
-    cleaned_tail = re.sub(r"[^a-zA-Z0-9:+\-]+", " ", tail)
-    tokens = [token for token in cleaned_tail.split() if token]
-
-    score_index: int | None = None
-    score_token: str | None = None
+    score_index = None
+    score_token = None
 
     for idx, token in enumerate(tokens):
         token_upper = token.upper()
@@ -244,48 +250,27 @@ def parse_player_state(line: str, alias: str, canonical_name: str, par: int) -> 
             "detail": "Player row was not parsed.",
             "teeTime": None,
             "found": False,
-            "sourceLine": line,
+            "sourceLine": row,
         }
 
     if score_token == "E":
         score = 0
-        status = derive_detail(tokens, score_index)
-        return {
-            "name": canonical_name,
-            "scoreToPar": score,
-            "scoreDisplay": score_display(score),
-            "status": status,
-            "detail": status,
-            "teeTime": None,
-            "found": True,
-            "sourceLine": line,
-        }
-
-    if re.fullmatch(r"[+-]\d+", score_token):
+    elif re.fullmatch(r"[+-]\d+", score_token):
         score = int(score_token)
-        status = derive_detail(tokens, score_index)
-        return {
-            "name": canonical_name,
-            "scoreToPar": score,
-            "scoreDisplay": score_display(score),
-            "status": status,
-            "detail": status,
-            "teeTime": None,
-            "found": True,
-            "sourceLine": line,
-        }
+    else:
+        score = 0
 
-    computed_score = parse_completed_status(tokens, score_index, par)
-    score = 0 if computed_score is None else computed_score
+    detail = derive_detail(tokens, score_index)
+
     return {
         "name": canonical_name,
         "scoreToPar": score,
         "scoreDisplay": score_display(score),
-        "status": score_token,
-        "detail": score_token,
+        "status": detail,
+        "detail": detail,
         "teeTime": None,
         "found": True,
-        "sourceLine": line,
+        "sourceLine": row,
     }
 
 
@@ -295,13 +280,17 @@ def load_config(config_path: Path) -> tuple[dict, list[TeamConfig]]:
     teams: list[TeamConfig] = []
 
     for team in raw["teams"]:
-        players = [
-            PlayerConfig(
-                name=player["name"],
-                aliases=player.get("aliases", [player["name"]]),
-            )
-            for player in team["players"]
-        ]
+        players = []
+        for player in team["players"]:
+            name = player["name"]
+            aliases = player.get("aliases", [name])
+
+            short_alias = make_short_alias(name)
+            if short_alias not in aliases:
+                aliases.append(short_alias)
+
+            players.append(PlayerConfig(name=name, aliases=aliases))
+
         teams.append(
             TeamConfig(
                 slug=team["slug"],
@@ -310,11 +299,13 @@ def load_config(config_path: Path) -> tuple[dict, list[TeamConfig]]:
                 players=players,
             )
         )
+
     return event, teams
 
 
 def build_output(lines: list[str], mode: str, event: dict, teams: list[TeamConfig], source_url: str | None) -> dict:
-    normalized_section = [(line, normalize_text(line)) for line in lines]
+    leaderboard_rows = build_leaderboard_rows(lines)
+    normalized_rows = [(row, normalize_text(row)) for row in leaderboard_rows]
     rendered_teams: list[dict] = []
 
     for team in teams:
@@ -322,7 +313,7 @@ def build_output(lines: list[str], mode: str, event: dict, teams: list[TeamConfi
         total = 0
 
         for player in team.players:
-            found = find_player_line(normalized_section, [player.name, *player.aliases])
+            found = find_player_row(normalized_rows, [player.name, *player.aliases])
 
             if found is None:
                 state = {
@@ -336,8 +327,8 @@ def build_output(lines: list[str], mode: str, event: dict, teams: list[TeamConfi
                     "sourceLine": None,
                 }
             else:
-                original_line, matched_alias = found
-                state = parse_player_state(original_line, matched_alias, player.name, int(event["par"]))
+                original_row, matched_alias = found
+                state = parse_player_row(original_row, matched_alias, player.name)
 
             total += int(state["scoreToPar"])
             rendered_players.append(state)
@@ -403,28 +394,11 @@ def main() -> int:
 
     debug_dir = Path("site/data")
     debug_dir.mkdir(parents=True, exist_ok=True)
-    (debug_dir / "raw_text_debug.txt").write_text(raw_text, encoding="utf-8")
     (debug_dir / "raw_lines_debug.txt").write_text("\n".join(lines[:800]), encoding="utf-8")
-    (debug_dir / "section_debug.txt").write_text("\n".join(section[:200]), encoding="utf-8")
-
-    print(f"DEBUG mode={mode}, total_lines={len(lines)}, section_lines={len(section)}")
-    print("DEBUG SECTION START")
-    for line in section[:120]:
-        print(line)
-    print("DEBUG SECTION END")
-
-    if mode == "unknown":
-        print("WARNING: Could not detect leaderboard section.")
+    (debug_dir / "section_debug.txt").write_text("\n".join(section[:250]), encoding="utf-8")
+    (debug_dir / "rows_debug.txt").write_text("\n".join(build_leaderboard_rows(section)), encoding="utf-8")
 
     output = build_output(section, mode, event, teams, source_url)
-
-    all_found = any(
-        player["found"]
-        for team in output["teams"]
-        for player in team["players"]
-    )
-    if not all_found:
-        print("WARNING: No player rows were parsed from the rendered page.")
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(output, indent=2), encoding="utf-8")
