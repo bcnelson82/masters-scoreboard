@@ -62,7 +62,6 @@ def read_source(url: str | None, input_file: Path | None) -> str:
     if not url:
         raise ValueError("A URL is required when --input-file is not provided.")
 
-    # Try rendered browser first
     try:
         from playwright.sync_api import sync_playwright
 
@@ -70,15 +69,17 @@ def read_source(url: str | None, input_file: Path | None) -> str:
             browser = p.chromium.launch(headless=True)
             page = browser.new_page(
                 user_agent=USER_AGENT,
-                viewport={"width": 1440, "height": 2200},
+                viewport={"width": 1440, "height": 2400},
             )
             page.goto(url, wait_until="domcontentloaded", timeout=60000)
-            page.wait_for_timeout(8000)
-            html = page.content()
+            page.wait_for_timeout(10000)
+
+            # Use rendered page text, not raw HTML
+            text = page.locator("body").inner_text()
             browser.close()
-            return html
+            return text
+
     except Exception:
-        # Fallback to plain HTTP
         response = requests.get(
             url,
             headers={"User-Agent": USER_AGENT},
@@ -402,7 +403,14 @@ def main() -> int:
         raw_text = read_source(source_url, input_file)
         lines = html_to_lines(raw_text)
         section, mode = choose_score_section(lines)
-
+        
+        debug_dir = Path("site/data")
+        debug_dir.mkdir(parents=True, exist_ok=True)
+        (debug_dir / "raw_text_debug.txt").write_text(raw_text, encoding="utf-8")
+        (debug_dir / "raw_lines_debug.txt").write_text("\n".join(lines[:800]), encoding="utf-8")
+        (debug_dir / "section_debug.txt").write_text("\n".join(section[:200]), encoding="utf-8")
+        print(f"DEBUG mode={mode}, total_lines={len(lines)}, section_lines={len(section)}")
+        
         if mode == "unknown":
             print("ERROR: Could not detect leaderboard section.", file=sys.stderr)
             return 1
