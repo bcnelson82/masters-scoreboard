@@ -36,6 +36,18 @@ jobs:
       - name: Run updater
         run: python scripts/update_scores.py --url "https://www.espn.com/golf/leaderboard/_/tournamentId/401811941"
 
+      - name: List generated site files
+        run: |
+          echo "=== site tree ==="
+          find site -maxdepth 3 -type f | sort || true
+          echo "=== data files preview ==="
+          for f in site/data/latest.json site/data/raw_text_debug.txt site/data/raw_lines_debug.txt site/data/section_debug.txt; do
+            if [ -f "$f" ]; then
+              echo "--- $f ---"
+              head -n 80 "$f" || true
+            fi
+          done
+
       - name: Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
