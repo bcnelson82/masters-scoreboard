@@ -95,15 +95,25 @@ def html_to_lines(raw_text: str) -> list[str]:
 
 
 
-def choose_score_section(lines: list[str]) -> tuple[list[str], str]:
-    upper_lines = [line.upper() for line in lines]
-    score_index = next((i for i, line in enumerate(upper_lines) if "POS PLAYER SCORE" in line), None)
-    tee_time_index = next((i for i, line in enumerate(upper_lines) if "PLAYER TEE TIME" in line), None)
+def choose_score_section(lines):
+    # Try to find a section that actually contains score patterns
+    score_pattern = re.compile(r"[+-]\d+|E")
 
-    if score_index is not None:
-        return lines[score_index + 1 :], "leaderboard"
-    if tee_time_index is not None:
-        return lines[tee_time_index + 1 :], "tee-times"
+    best_section = []
+    best_count = 0
+
+    for i in range(len(lines)):
+        window = lines[i:i+50]
+
+        score_hits = sum(1 for line in window if score_pattern.search(line))
+
+        if score_hits > best_count:
+            best_count = score_hits
+            best_section = window
+
+    if best_count > 5:
+        return best_section, "leaderboard"
+
     return lines, "unknown"
 
 
