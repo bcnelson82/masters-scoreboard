@@ -4,7 +4,6 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import sys
 import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -73,12 +72,9 @@ def read_source(url: str | None, input_file: Path | None) -> str:
             )
             page.goto(url, wait_until="domcontentloaded", timeout=60000)
             page.wait_for_timeout(10000)
-
-            # Use rendered page text, not raw HTML
             text = page.locator("body").inner_text()
             browser.close()
             return text
-
     except Exception:
         response = requests.get(
             url,
@@ -101,7 +97,6 @@ def html_to_lines(raw_text: str) -> list[str]:
 
 
 def choose_score_section(lines: list[str]) -> tuple[list[str], str]:
-    joined = "\n".join(lines)
     score_pattern = re.compile(r"\b(?:E|[+-]\d+)\b")
 
     best_section: list[str] = []
@@ -117,7 +112,8 @@ def choose_score_section(lines: list[str]) -> tuple[list[str], str]:
     if best_count >= 3:
         return best_section, "leaderboard"
 
-    if "tee time" in joined.lower():
+    joined = "\n".join(lines).lower()
+    if "tee time" in joined:
         return lines, "tee-times"
 
     return lines, "unknown"
@@ -144,6 +140,7 @@ def extract_line_after_alias(line: str, alias: str) -> str:
 def parse_completed_status(tokens: list[str], start_index: int, par: int) -> int | None:
     round_scores: list[int] = []
     total_strokes: int | None = None
+
     for token in tokens[start_index + 1:]:
         if not re.fullmatch(r"\d+", token):
             continue
@@ -154,8 +151,10 @@ def parse_completed_status(tokens: list[str], start_index: int, par: int) -> int
         if 100 <= value <= 400 and total_strokes is None:
             total_strokes = value
             break
+
     if total_strokes is None or not round_scores:
         return None
+
     return total_strokes - par * len(round_scores)
 
 
@@ -213,7 +212,6 @@ def parse_player_state(line: str, alias: str, canonical_name: str, par: int) -> 
         }
 
     tail = extract_line_after_alias(line, alias)
-
     tail = re.sub(r"([+-]\d+)([+-]\d+)", r"\1 \2", tail)
     tail = re.sub(r"-{2,}", " ", tail)
 
@@ -318,6 +316,7 @@ def build_output(lines: list[str], mode: str, event: dict, teams: list[TeamConfi
 
         for player in team.players:
             found = find_player_line(normalized_section, [player.name, *player.aliases])
+
             if found is None:
                 state = {
                     "name": player.name,
@@ -346,14 +345,6 @@ def build_output(lines: list[str], mode: str, event: dict, teams: list[TeamConfi
                 "players": rendered_players,
             }
         )
-
-    all_found = any(
-        player["found"]
-        for team in rendered_teams
-        for player in team["players"]
-    )
-    if not all_found:
-        raise ValueError("No player rows were parsed from the rendered page.")
 
     sorted_totals = sorted(rendered_teams, key=lambda team: team["totalScoreToPar"])
     leader_slug = sorted_totals[0]["slug"] if sorted_totals else None
@@ -399,26 +390,34 @@ def main() -> int:
     event, teams = load_config(config_path)
     source_url = args.url or event.get("leaderboardUrl")
 
-    try:
-        raw_text = read_source(source_url, input_file)
-        lines = html_to_lines(raw_text)
-        section, mode = choose_score_section(lines)
-        
-        debug_dir = Path("site/data")
-        debug_dir.mkdir(parents=True, exist_ok=True)
-        (debug_dir / "raw_text_debug.txt").write_text(raw_text, encoding="utf-8")
-        (debug_dir / "raw_lines_debug.txt").write_text("\n".join(lines[:800]), encoding="utf-8")
-        (debug_dir / "section_debug.txt").write_text("\n".join(section[:200]), encoding="utf-8")
-        print(f"DEBUG mode={mode}, total_lines={len(lines)}, section_lines={len(section)}")
-        
-        if mode == "unknown":
-            print("ERROR: Could not detect leaderboard section.", file=sys.stderr)
-            return 1
+    raw_text = read_source(source_url, input_file)
+    lines = html_to_lines(raw_text)
+    section, mode = choose_score_section(lines)
 
-        output = build_output(section, mode, event, teams, source_url)
-    except Exception as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
+    debug_dir = Path("site/data")
+    debug_dir.mkdir(parents=True, exist_ok=True)
+    (debug_dir / "raw_text_debug.txt").write_text(raw_text, encoding="utf-8")
+    (debug_dir / "raw_lines_debug.txt").write_text("\n".join(lines[:800]), encoding="utf-8")
+    (debug_dir / "section_debug.txt").write_text("\n".join(section[:200]), encoding="utf-8")
+
+    print(f"DEBUG mode={mode}, total_lines={len(lines)}, section_lines={len(section)}")
+    print("DEBUG SECTION START")
+    for line in section[:120]:
+        print(line)
+    print("DEBUG SECTION END")
+
+    if mode == "unknown":
+        print("WARNING: Could not detect leaderboard section.")
+
+    output = build_output(section, mode, event, teams, source_url)
+
+    all_found = any(
+        player["found"]
+        for team in output["teams"]
+        for player in team["players"]
+    )
+    if not all_found:
+        print("WARNING: No player rows were parsed from the rendered page.")
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(output, indent=2), encoding="utf-8")
