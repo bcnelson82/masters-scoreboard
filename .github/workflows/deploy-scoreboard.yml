@@ -26,10 +26,14 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
-        run: pip install requests beautifulsoup4
+      - name: Install Python dependencies
+        run: |
+          pip install requests beautifulsoup4 playwright
 
-      - name: Run updater 
+      - name: Install Chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: Run updater
         run: python scripts/update_scores.py --url "https://www.espn.com/golf/leaderboard/_/tournamentId/401811941"
 
       - name: Upload GitHub Pages artifact
