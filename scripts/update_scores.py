@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
+from bs4 import BeautifulSoup
 
 
 DEFAULT_TIMEOUT = 30
@@ -19,6 +20,8 @@ USER_AGENT = (
 )
 
 ESPN_API_URL = "https://site.web.api.espn.com/apis/v2/sports/golf/pga/leaderboard"
+ESPN_PAGE_URL = "https://www.espn.com/golf/leaderboard?season=2025&tournamentId=401811941"
+STATUS_TOKENS = {"CUT", "WD", "DQ", "MDF", "DNS"}
 
 
 @dataclass
@@ -62,11 +65,11 @@ def make_short_alias(full_name: str) -> str:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Generate landing-page JSON from the ESPN golf leaderboard API."
+        description="Generate landing-page JSON from ESPN golf data."
     )
     parser.add_argument("--config", default="teams.json", help="Path to teams.json")
     parser.add_argument("--out", default="site/data/latest.json", help="Output JSON path")
-    parser.add_argument("--url", default=None, help="Optional override API URL")
+    parser.add_argument("--url", default=None, help="Optional override URL")
     parser.add_argument("--event-id", default="401811941", help="ESPN event id")
     return parser.parse_args()
 
@@ -81,11 +84,9 @@ def load_config(config_path: Path) -> tuple[dict, list[TeamConfig]]:
         for player in team["players"]:
             name = player["name"]
             aliases = list(player.get("aliases", [name]))
-
             short_alias = make_short_alias(name)
             if short_alias not in aliases:
                 aliases.append(short_alias)
-
             players.append(PlayerConfig(name=name, aliases=aliases))
 
         teams.append(
@@ -100,17 +101,6 @@ def load_config(config_path: Path) -> tuple[dict, list[TeamConfig]]:
     return event, teams
 
 
-def fetch_api_payload(api_url: str, event_id: str) -> dict:
-    response = requests.get(
-        api_url,
-        params={"event": event_id},
-        headers={"User-Agent": USER_AGENT},
-        timeout=DEFAULT_TIMEOUT,
-    )
-    response.raise_for_status()
-    return response.json()
-
-
 def parse_score_to_int(score_value: str | None) -> int:
     if not score_value:
         return 0
@@ -119,12 +109,9 @@ def parse_score_to_int(score_value: str | None) -> int:
 
     if value in {"E", "EVEN"}:
         return 0
-
     if re.fullmatch(r"[+-]\d+", value):
         return int(value)
-
     if re.fullmatch(r"\d+", value):
-        # Rare case: API gives raw positive number without +
         return int(value)
 
     return 0
@@ -149,7 +136,6 @@ def normalize_status(detail: str | None) -> tuple[str, str | None]:
     if thru_match:
         return f"Thru {thru_match.group(1)}", None
 
-    # ESPN often uses compact forms like E(10), -2(11), -1(F)
     compact_match = re.search(r"\(([0-9]{1,2}|F)\)", upper)
     if compact_match:
         token = compact_match.group(1)
@@ -157,10 +143,21 @@ def normalize_status(detail: str | None) -> tuple[str, str | None]:
             return "Final", None
         return f"Thru {token}", None
 
-    if upper in {"CUT", "WD", "DQ", "MDF", "DNS"}:
+    if upper in STATUS_TOKENS:
         return upper, None
 
     return text.title(), None
+
+
+def fetch_api_payload(api_url: str, event_id: str) -> dict:
+    response = requests.get(
+        api_url,
+        params={"event": event_id},
+        headers={"User-Agent": USER_AGENT},
+        timeout=DEFAULT_TIMEOUT,
+    )
+    response.raise_for_status()
+    return response.json()
 
 
 def get_competitors(payload: dict) -> list[dict]:
@@ -218,33 +215,191 @@ def extract_player_entry(competitor: dict) -> dict:
         "teeTime": tee_time,
         "found": True,
         "sourceLine": json.dumps(
-            {
-                "name": name,
-                "score": raw_score_str,
-                "detail": detail,
-            },
+            {"name": name, "score": raw_score_str, "detail": detail},
             ensure_ascii=False,
         ),
     }
 
 
-def build_player_lookup(competitors: list[dict]) -> dict[str, dict]:
+def build_player_lookup_from_api(competitors: list[dict]) -> dict[str, dict]:
     lookup: dict[str, dict] = {}
 
     for competitor in competitors:
         entry = extract_player_entry(competitor)
-
         keys = {
             entry["normalizedName"],
             normalize_text(entry["name"]),
             normalize_text(make_short_alias(entry["name"])),
         }
-
         for key in keys:
             if key and key not in lookup:
                 lookup[key] = entry
 
     return lookup
+
+
+def html_to_lines(raw_text: str) -> list[str]:
+    soup = BeautifulSoup(raw_text, "html.parser")
+    text = soup.get_text("\n") if "<" in raw_text else raw_text
+    lines: list[str] = []
+    for raw_line in text.splitlines():
+        line = re.sub(r"\s+", " ", raw_line).strip()
+        if line:
+            lines.append(line)
+    return lines
+
+
+def choose_score_section(lines: list[str]) -> tuple[list[str], str]:
+    for i, line in enumerate(lines):
+        if "POS PLAYER SCORE TODAY THRU" in line.upper():
+            section = []
+            for row in lines[i + 1:]:
+                upper = row.upper()
+                if upper.startswith("GLOSSARY") or upper.startswith("LATEST GOLF VIDEOS"):
+                    break
+                section.append(row)
+            return section, "leaderboard"
+
+    joined = "\n".join(lines).lower()
+    if "tee time" in joined:
+        return lines, "tee-times"
+
+    return lines, "unknown"
+
+
+def is_position_line(line: str) -> bool:
+    return bool(re.fullmatch(r"(T?\d+|[-])\.?", line.strip()))
+
+
+def is_score_block_line(line: str) -> bool:
+    line = line.strip()
+    if not line:
+        return False
+    if re.match(r"^(?:E|[+-]\d+|-)\b", line):
+        return True
+    if re.search(r"\b(?:F|\d{1,2}:\d{2}|\d{1,2})\b", line):
+        return True
+    if re.search(r"--\s+--\s+--", line):
+        return True
+    return False
+
+
+def build_leaderboard_rows(lines: list[str]) -> list[str]:
+    rows: list[str] = []
+    i = 0
+
+    while i < len(lines):
+        line = lines[i].strip()
+
+        if line.upper().startswith("GLOSSARY") or line.upper().startswith("LATEST GOLF VIDEOS"):
+            break
+
+        if is_position_line(line):
+            if i + 2 < len(lines):
+                name_line = lines[i + 1].strip()
+                stats_line = lines[i + 2].strip()
+
+                if name_line and stats_line and is_score_block_line(stats_line):
+                    rows.append(f"{name_line} {stats_line}")
+                    i += 3
+                    continue
+
+        if i + 1 < len(lines):
+            name_line = lines[i].strip()
+            stats_line = lines[i + 1].strip()
+
+            if (
+                name_line
+                and stats_line
+                and not is_position_line(name_line)
+                and is_score_block_line(stats_line)
+                and re.search(r"[A-Za-z]", name_line)
+            ):
+                rows.append(f"{name_line} {stats_line}")
+                i += 2
+                continue
+
+        i += 1
+
+    return rows
+
+
+def build_player_lookup_from_page(page_url: str) -> tuple[dict[str, dict], dict]:
+    response = requests.get(
+        page_url,
+        headers={"User-Agent": USER_AGENT},
+        timeout=DEFAULT_TIMEOUT,
+    )
+    response.raise_for_status()
+
+    lines = html_to_lines(response.text)
+    section, mode = choose_score_section(lines)
+    rows = build_leaderboard_rows(section)
+
+    lookup: dict[str, dict] = {}
+
+    for row in rows:
+        parts = row.split()
+        # Split name from score block by locating first score token
+        score_start = None
+        for idx, token in enumerate(parts):
+            upper = token.upper()
+            if upper == "E" or re.fullmatch(r"[+-]\d+", upper) or token == "-":
+                score_start = idx
+                break
+
+        if score_start is None:
+            continue
+
+        name = " ".join(parts[:score_start]).strip()
+        if not name:
+            continue
+
+        score_token = parts[score_start].upper()
+        score_int = 0 if score_token in {"E", "-"} else parse_score_to_int(score_token)
+
+        trailing = parts[score_start + 1:]
+        detail = "Live"
+        tee_time = None
+
+        if len(parts) >= score_start + 4 and parts[score_start] == "-" and parts[score_start + 1] == "-":
+            tee_time = f"{parts[score_start + 2]} {parts[score_start + 3].upper()}"
+            detail = f"Tee time {tee_time}"
+            score_int = 0
+        else:
+            if trailing:
+                if trailing[0].upper() == "F":
+                    detail = "Final"
+                elif re.fullmatch(r"\d{1,2}", trailing[0]):
+                    detail = f"Thru {trailing[0]}"
+
+        entry = {
+            "name": name,
+            "normalizedName": normalize_text(name),
+            "scoreToPar": score_int,
+            "scoreDisplay": score_display(score_int),
+            "status": detail,
+            "detail": detail,
+            "teeTime": tee_time,
+            "found": True,
+            "sourceLine": row,
+        }
+
+        keys = {
+            entry["normalizedName"],
+            normalize_text(name),
+            normalize_text(make_short_alias(name)),
+        }
+        for key in keys:
+            if key and key not in lookup:
+                lookup[key] = entry
+
+    debug = {
+        "mode": mode,
+        "rowsBuilt": len(rows),
+        "sampleRows": rows[:25],
+    }
+    return lookup, debug
 
 
 def find_player(player: PlayerConfig, lookup: dict[str, dict]) -> dict | None:
@@ -262,10 +417,7 @@ def find_player(player: PlayerConfig, lookup: dict[str, dict]) -> dict | None:
     return None
 
 
-def build_output(payload: dict, event: dict, teams: list[TeamConfig], source_url: str) -> dict:
-    competitors = get_competitors(payload)
-    lookup = build_player_lookup(competitors)
-
+def build_output_from_lookup(lookup: dict[str, dict], event: dict, teams: list[TeamConfig], source_url: str, mode: str) -> dict:
     rendered_teams: list[dict] = []
 
     for team in teams:
@@ -281,7 +433,7 @@ def build_output(payload: dict, event: dict, teams: list[TeamConfig], source_url
                     "scoreToPar": 0,
                     "scoreDisplay": "E",
                     "status": "Missing",
-                    "detail": "Player was not found in the API response.",
+                    "detail": "Player was not found in the source response.",
                     "teeTime": None,
                     "found": False,
                     "sourceLine": None,
@@ -327,7 +479,7 @@ def build_output(payload: dict, event: dict, teams: list[TeamConfig], source_url
             "scoringRule": event["scoringRule"],
             "refreshMinutes": event["refreshMinutes"],
             "sourceUrl": source_url,
-            "mode": "api",
+            "mode": mode,
         },
         "meta": {
             "fetchedAtUtc": fetched_at,
@@ -345,19 +497,31 @@ def main() -> int:
 
     event, teams = load_config(config_path)
 
-    api_url = args.url or event.get("leaderboardUrl") or ESPN_API_URL
-    event_id = args.event_id
-
-    payload = fetch_api_payload(api_url, event_id)
-
     debug_dir = Path("site/data")
     debug_dir.mkdir(parents=True, exist_ok=True)
-    (debug_dir / "api_payload_debug.json").write_text(
-        json.dumps(payload, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
 
-    output = build_output(payload, event, teams, api_url)
+    # Try API first
+    api_url = args.url or ESPN_API_URL
+    event_id = args.event_id
+
+    try:
+        payload = fetch_api_payload(api_url, event_id)
+        (debug_dir / "api_payload_debug.json").write_text(
+            json.dumps(payload, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        competitors = get_competitors(payload)
+        lookup = build_player_lookup_from_api(competitors)
+        output = build_output_from_lookup(lookup, event, teams, api_url, "api")
+    except Exception as exc:
+        # Fallback to normal ESPN page
+        page_lookup, debug = build_player_lookup_from_page(ESPN_PAGE_URL)
+        (debug_dir / "page_fallback_debug.json").write_text(
+            json.dumps(debug, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        output = build_output_from_lookup(page_lookup, event, teams, ESPN_PAGE_URL, "page-fallback")
+        output["meta"]["apiFallbackReason"] = str(exc)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(output, indent=2, ensure_ascii=False), encoding="utf-8")
