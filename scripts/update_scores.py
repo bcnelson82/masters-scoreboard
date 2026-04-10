@@ -132,18 +132,25 @@ def normalize_status(detail: str | None) -> tuple[str, str | None]:
     if upper in {"FINAL", "F"}:
         return "Final", None
 
+    # Handles strings like "Round 1 - In Progress, Thru 12"
+    round_thru = re.search(r"ROUND\s+(\d).*?THRU\s+(\d{1,2})", upper)
+    if round_thru:
+        return f"R{round_thru.group(1)} • Thru {round_thru.group(2)}", None
+
+    # Handles strings like "Thru 12"
     thru_match = re.search(r"\bTHRU\s+(\d{1,2})\b", upper)
     if thru_match:
         return f"Thru {thru_match.group(1)}", None
 
+    # Handles compact ESPN forms like "-2(11)" or "E(F)"
     compact_match = re.search(r"\(([0-9]{1,2}|F)\)", upper)
     if compact_match:
         token = compact_match.group(1)
         if token == "F":
-            return "Final", None
+            return "Round complete", None
         return f"Thru {token}", None
 
-    if upper in STATUS_TOKENS:
+    if upper in {"CUT", "WD", "DQ", "MDF", "DNS"}:
         return upper, None
 
     return text.title(), None
