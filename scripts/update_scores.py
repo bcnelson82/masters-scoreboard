@@ -103,7 +103,7 @@ def fetch_api(event_id: str):
         timeout=DEFAULT_TIMEOUT,
     )
     r.raise_for_status()
-    return r.json()
+    return r.json() 
 
 
 def build_api_lookup(payload):
