@@ -27,7 +27,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install Python dependencies
-        run: pip install requests
+        run: pip install requests beautifulsoup4
 
       - name: Print trigger type
         run: echo "Triggered by ${{ github.event_name }}"
