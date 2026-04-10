@@ -34,7 +34,8 @@ class TeamConfig:
 def normalize_text(value: str) -> str:
     decomposed = unicodedata.normalize("NFKD", value)
     without_marks = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
-    lowered = without_marks.lower()
+    lowered = without_marks.lower().replace("’", "'")
+    lowered = re.sub(r"\(a\)", "", lowered)
     lowered = re.sub(r"[^a-z0-9 ]+", " ", lowered)
     lowered = re.sub(r"\s+", " ", lowered)
     return lowered.strip()
@@ -61,20 +62,20 @@ def parse_score_to_int(score: str) -> int:
     return int(score)
 
 
-def load_config(path: Path):
-    raw = json.loads(path.read_text())
+def load_config(path: Path) -> tuple[dict, list[TeamConfig]]:
+    raw = json.loads(path.read_text(encoding="utf-8"))
     event = raw["event"]
 
-    teams = []
+    teams: list[TeamConfig] = []
     for t in raw["teams"]:
-        players = []
+        players: list[PlayerConfig] = []
         for p in t["players"]:
             name = p["name"]
-            aliases = p.get("aliases", [name])
-            short = make_short_alias(name)
-            if short not in aliases:
-                aliases.append(short)
-            players.append(PlayerConfig(name, aliases))
+            aliases = list(p.get("aliases", [name]))
+            short_alias = make_short_alias(name)
+            if short_alias not in aliases:
+                aliases.append(short_alias)
+            players.append(PlayerConfig(name=name, aliases=aliases))
 
         teams.append(
             TeamConfig(
@@ -89,123 +90,75 @@ def load_config(path: Path):
 
 
 def fetch_page_text() -> list[str]:
-    r = requests.get(ESPN_PAGE_URL, headers={"User-Agent": USER_AGENT}, timeout=DEFAULT_TIMEOUT)
-    r.raise_for_status()
-    soup = BeautifulSoup(r.text, "html.parser")
+    response = requests.get(
+        ESPN_PAGE_URL,
+        headers={"User-Agent": USER_AGENT},
+        timeout=DEFAULT_TIMEOUT,
+    )
+    response.raise_for_status()
+
+    soup = BeautifulSoup(response.text, "html.parser")
     text = soup.get_text("\n")
-    lines = [re.sub(r"\s+", " ", l).strip() for l in text.splitlines() if l.strip()]
-    return lines
-
-
-def choose_score_section(lines: list[str]) -> list[str]:
-    for i, line in enumerate(lines):
-        if "POS PLAYER SCORE TODAY THRU" in line.upper():
-            section = []
-            for row in lines[i + 1:]:
-                upper = row.upper()
-                if upper.startswith("GLOSSARY") or upper.startswith("LATEST GOLF VIDEOS"):
-                    break
-                section.append(row)
-            return section
-    return lines
+    return [re.sub(r"\s+", " ", line).strip() for line in text.splitlines() if line.strip()]
 
 
 def build_page_lookup() -> tuple[dict[str, dict], list[str]]:
     lines = fetch_page_text()
-    section = choose_score_section(lines)
 
-    lookup = {}
-    debug_rows = []
+    lookup: dict[str, dict] = {}
+    debug_rows: list[str] = []
 
     i = 0
-    while i < len(section):
-        line = section[i]
+    while i < len(lines):
+        line = lines[i].strip()
 
-        # Case 1:
-        # Scottie Scheffler E
-        # T21 12
-        # or Justin Thomas -
-        # - 1:32 PM
-        m = re.match(r"^(.*\S)\s+(E|[+-]\d+|-)$", line)
-        if m:
-            name = m.group(1).strip()
-            score_token = m.group(2).upper()
-            score_int = 0 if score_token in {"E", "-"} else parse_score_to_int(score_token)
+        # Pattern A:
+        # "Scottie Scheffler E"
+        # next line: "T21 12"
+        # or next line: "5:44 PM"
+        match = re.match(r"^(.*\S)\s+(E|[+-]\d+|-)$", line)
+        if match:
+            name = match.group(1).strip()
+            score_token = match.group(2).upper()
 
-            detail = "Live"
-            tee_time = None
-            source_line = line
-
-            if i + 1 < len(section):
-                next_line = section[i + 1].strip()
-
-                tee_match = re.search(r"(\d{1,2}:\d{2}\s*(AM|PM))", next_line.upper())
-                if tee_match:
-                    tee_time = tee_match.group(1).replace("  ", " ")
-                    detail = f"Tee time {tee_time}"
-                    score_int = 0
-                    source_line = f"{line} | {next_line}"
-                else:
-                    thru_match = re.search(r"(?:T?\d+\s+)?(F|\d{1,2})$", next_line.upper())
-                    if thru_match:
-                        token = thru_match.group(1)
-                        if token == "F":
-                            detail = "R1 • Complete"
-                        else:
-                            detail = f"R1 • Thru {token}"
-                        source_line = f"{line} | {next_line}"
-
-            entry = {
-                "name": name,
-                "scoreToPar": score_int,
-                "scoreDisplay": score_display(score_int),
-                "status": detail,
-                "detail": detail,
-                "teeTime": tee_time,
-                "found": True,
-                "sourceLine": source_line,
-            }
-
-            for key in {
-                normalize_text(name),
-                normalize_text(make_short_alias(name)),
+            # Skip obvious non-player/header lines
+            if name.upper() not in {
+                "POS PLAYER SCORE TODAY THRU",
+                "LEADERBOARD",
+                "PLAYER STATS",
+                "COURSE STATS",
             }:
-                lookup[key] = entry
-
-            debug_rows.append(source_line)
-            i += 1
-            continue
-
-        # Case 2:
-        # Rory McIlroy -5 -5 10 -- -- -- -- 31
-        parts = line.split()
-        score_start = None
-        for idx, token in enumerate(parts):
-            upper = token.upper()
-            if upper == "E" or re.fullmatch(r"[+-]\d+", upper) or token == "-":
-                score_start = idx
-                break
-
-        if score_start is not None:
-            name = " ".join(parts[:score_start]).strip()
-            if name:
-                score_token = parts[score_start].upper()
                 score_int = 0 if score_token in {"E", "-"} else parse_score_to_int(score_token)
-                trailing = parts[score_start + 1:]
-
                 detail = "Live"
                 tee_time = None
+                source_line = line
 
-                if len(parts) >= score_start + 4 and parts[score_start] == "-" and parts[score_start + 1] == "-":
-                    tee_time = f"{parts[score_start + 2]} {parts[score_start + 3].upper()}"
-                    detail = f"Tee time {tee_time}"
-                    score_int = 0
-                elif len(trailing) >= 2:
-                    thru_token = trailing[1].upper()
-                    if thru_token == "F":
-                        detail = "R1 • Complete"
-                    elif re.fullmatch(r"\d{1,2}", thru_token):
-                        detail = f"R1 • Thru {thru_token}"
+                if i + 1 < len(lines):
+                    next_line = lines[i + 1].strip()
+
+                    # Tee time line examples:
+                    # "5:44 PM"
+                    # "- 5:44 PM"
+                    tee_match = re.search(r"(\d{1,2}:\d{2}\s*(AM|PM))", next_line.upper())
+                    if tee_match:
+                        tee_time = tee_match.group(1).replace("  ", " ")
+                        detail = f"Tee time {tee_time}"
+                        score_int = 0
+                        source_line = f"{line} | {next_line}"
+                    else:
+                        # Hole / finish line examples:
+                        # "T21 12"
+                        # "E 17"
+                        # "-2 14"
+                        # "F"
+                        thru_match = re.search(r"(?:T?\d+\s+)?(F|\d{1,2})$", next_line.upper())
+                        if thru_match:
+                            token = thru_match.group(1)
+                            if token == "F":
+                                detail = "R1 • Complete"
+                            else:
+                                detail = f"R1 • Thru {token}"
+                            source_line = f"{line} | {next_line}"
 
                 entry = {
                     "name": name,
@@ -215,7 +168,7 @@ def build_page_lookup() -> tuple[dict[str, dict], list[str]]:
                     "detail": detail,
                     "teeTime": tee_time,
                     "found": True,
-                    "sourceLine": line,
+                    "sourceLine": source_line,
                 }
 
                 for key in {
@@ -224,23 +177,29 @@ def build_page_lookup() -> tuple[dict[str, dict], list[str]]:
                 }:
                     lookup[key] = entry
 
-                debug_rows.append(line)
+                debug_rows.append(source_line)
 
         i += 1
 
     return lookup, debug_rows
 
 
-def build_output(lookup, event, teams):
+def build_output(lookup: dict[str, dict], event: dict, teams: list[TeamConfig]) -> dict:
     result = []
 
     for team in teams:
         players = []
         total = 0
 
-        for p in team.players:
+        for player in team.players:
             found = None
-            for alias in [p.name] + p.aliases:
+            candidates = [player.name, *player.aliases]
+
+            short_alias = make_short_alias(player.name)
+            if short_alias not in candidates:
+                candidates.append(short_alias)
+
+            for alias in candidates:
                 key = normalize_text(alias)
                 if key in lookup:
                     found = lookup[key]
@@ -248,7 +207,7 @@ def build_output(lookup, event, teams):
 
             if not found:
                 found = {
-                    "name": p.name,
+                    "name": player.name,
                     "scoreToPar": 0,
                     "scoreDisplay": "E",
                     "status": "Missing",
@@ -258,16 +217,19 @@ def build_output(lookup, event, teams):
                     "sourceLine": None,
                 }
 
-            total += found["scoreToPar"]
+            total += int(found["scoreToPar"])
             players.append(found)
 
-        result.append({
-            "slug": team.slug,
-            "displayName": team.display_name,
-            "totalScoreToPar": total,
-            "totalScoreDisplay": score_display(total),
-            "players": players
-        })
+        result.append(
+            {
+                "slug": team.slug,
+                "displayName": team.display_name,
+                "subtitle": team.subtitle,
+                "totalScoreToPar": total,
+                "totalScoreDisplay": score_display(total),
+                "players": players,
+            }
+        )
 
     leader_slug = None
     margin = None
@@ -294,23 +256,37 @@ def build_output(lookup, event, teams):
     }
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="teams.json")
     parser.add_argument("--out", default="site/data/latest.json")
-    parser.add_argument("--event-id", default="401811941")  # ignored, kept for workflow compatibility
+    parser.add_argument("--event-id", default="401811941")  # kept for workflow compatibility
     args = parser.parse_args()
 
     event, teams = load_config(Path(args.config))
-    lookup, debug_rows = build_page_lookup()
+    out_path = Path(args.out)
 
     Path("site/data").mkdir(parents=True, exist_ok=True)
-    Path("site/data/rows_debug.txt").write_text("\n".join(debug_rows[:200]))
+
+    lookup, debug_rows = build_page_lookup()
+    Path("site/data/rows_debug.txt").write_text("\n".join(debug_rows[:200]), encoding="utf-8")
 
     output = build_output(lookup, event, teams)
 
-    Path(args.out).write_text(json.dumps(output, indent=2))
-    print("Updated scores.")
+    found_count = sum(
+        1
+        for team in output["teams"]
+        for player in team["players"]
+        if player.get("found")
+    )
+
+    # Don't overwrite a previously good file with an empty scrape
+    if found_count == 0 and out_path.exists():
+        print("No players parsed; keeping previous latest.json")
+        return
+
+    out_path.write_text(json.dumps(output, indent=2), encoding="utf-8")
+    print(f"Updated scores. Parsed {found_count} players.")
 
 
 if __name__ == "__main__":
