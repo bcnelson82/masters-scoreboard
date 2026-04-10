@@ -29,6 +29,9 @@ jobs:
       - name: Install Python dependencies
         run: pip install requests beautifulsoup4
 
+      - name: Run updater
+        run: python scripts/update_scores.py --event-id "401811941"
+
       - name: Print trigger type
         run: echo "Triggered by ${{ github.event_name }}"
 
