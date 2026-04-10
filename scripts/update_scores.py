@@ -376,10 +376,10 @@ def build_player_lookup_from_page(page_url: str) -> tuple[dict[str, dict], dict]
         else:
             if trailing:
                 if trailing[0].upper() == "F":
-                    detail = "Final"
+                    detail = "R1 • Complete"
                 elif re.fullmatch(r"\d{1,2}", trailing[0]):
-                    detail = f"Thru {trailing[0]}"
-
+                    detail = f"R1 • Thru {trailing[0]}"
+                    
         entry = {
             "name": name,
             "normalizedName": normalize_text(name),
@@ -423,6 +423,38 @@ def find_player(player: PlayerConfig, lookup: dict[str, dict]) -> dict | None:
 
     return None
 
+def merge_lookups(api_lookup: dict[str, dict], page_lookup: dict[str, dict], teams: list[TeamConfig]) -> dict[str, dict]:
+    merged = dict(api_lookup)
+
+    for team in teams:
+        for player in team.players:
+            candidates = [player.name, *player.aliases]
+            short_alias = make_short_alias(player.name)
+            if short_alias not in candidates:
+                candidates.append(short_alias)
+
+            best_api = None
+            best_page = None
+
+            for alias in candidates:
+                key = normalize_text(alias)
+                if best_api is None and key in api_lookup:
+                    best_api = api_lookup[key]
+                if best_page is None and key in page_lookup:
+                    best_page = page_lookup[key]
+
+            if best_api and best_page:
+                # Keep API score, but use page detail if page has something more useful than generic "Live"
+                if best_page.get("detail") and best_page.get("detail") not in {"Live", "Missing"}:
+                    merged_entry = dict(best_api)
+                    merged_entry["status"] = best_page["status"]
+                    merged_entry["detail"] = best_page["detail"]
+                    merged_entry["teeTime"] = best_page.get("teeTime")
+                    merged_entry["sourceLine"] = best_page.get("sourceLine")
+                    for alias in candidates:
+                        merged[normalize_text(alias)] = merged_entry
+
+    return merged
 
 def build_output_from_lookup(lookup: dict[str, dict], event: dict, teams: list[TeamConfig], source_url: str, mode: str) -> dict:
     rendered_teams: list[dict] = []
@@ -507,8 +539,7 @@ def main() -> int:
     debug_dir = Path("site/data")
     debug_dir.mkdir(parents=True, exist_ok=True)
 
-    # Try API first
-    api_url = args.url or ESPN_API_URL
+    api_url = ESPN_API_URL
     event_id = args.event_id
 
     try:
@@ -517,11 +548,21 @@ def main() -> int:
             json.dumps(payload, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
+
         competitors = get_competitors(payload)
-        lookup = build_player_lookup_from_api(competitors)
-        output = build_output_from_lookup(lookup, event, teams, api_url, "api")
+        api_lookup = build_player_lookup_from_api(competitors)
+
+        # Build page lookup too, to improve hole / round / tee-time detail
+        page_lookup, debug = build_player_lookup_from_page(ESPN_PAGE_URL)
+        (debug_dir / "page_fallback_debug.json").write_text(
+            json.dumps(debug, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+        merged_lookup = merge_lookups(api_lookup, page_lookup, teams)
+        output = build_output_from_lookup(merged_lookup, event, teams, ESPN_PAGE_URL, "api+page-status")
+
     except Exception as exc:
-        # Fallback to normal ESPN page
         page_lookup, debug = build_player_lookup_from_page(ESPN_PAGE_URL)
         (debug_dir / "page_fallback_debug.json").write_text(
             json.dumps(debug, indent=2, ensure_ascii=False),
@@ -534,7 +575,6 @@ def main() -> int:
     out_path.write_text(json.dumps(output, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"Wrote {out_path}")
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())
