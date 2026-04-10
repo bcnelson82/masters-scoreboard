@@ -29,14 +29,10 @@ jobs:
           python-version: "3.11"
 
       - name: Install Python dependencies
-        run: |
-          pip install requests beautifulsoup4 playwright
-
-      - name: Install Chromium
-        run: python -m playwright install --with-deps chromium
+        run: pip install requests
 
       - name: Run updater
-        run: python scripts/update_scores.py --url "https://www.espn.com/golf/leaderboard/_/tournamentId/401811941"
+        run: python scripts/update_scores.py --event-id "401811941"
 
       - name: List generated site files
         run: |
