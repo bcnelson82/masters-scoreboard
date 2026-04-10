@@ -374,11 +374,17 @@ def build_player_lookup_from_page(page_url: str) -> tuple[dict[str, dict], dict]
             detail = f"Tee time {tee_time}"
             score_int = 0
         else:
-            if trailing:
-                if trailing[0].upper() == "F":
+            if len(trailing) >= 2:
+                thru_token = trailing[1].upper()
+
+                if thru_token == "F":
                     detail = "R1 • Complete"
-                elif re.fullmatch(r"\d{1,2}", trailing[0]):
-                    detail = f"R1 • Thru {trailing[0]}"
+                elif re.fullmatch(r"\d{1,2}", thru_token):
+                    detail = f"R1 • Thru {thru_token}"
+                else:
+                    detail = "Live"
+            else:
+                detail = "Live"
                     
         entry = {
             "name": name,
