@@ -20,7 +20,7 @@ USER_AGENT = (
 )
 
 ESPN_API_URL = "https://site.web.api.espn.com/apis/v2/sports/golf/pga/leaderboard"
-ESPN_PAGE_URL = "https://www.espn.com/golf/leaderboard?season=2025&tournamentId=401811941"
+ESPN_PAGE_URL = "https://www.espn.com/golf/leaderboard/_/tournamentId/401811941"
 STATUS_TOKENS = {"CUT", "WD", "DQ", "MDF", "DNS"}
 
 
@@ -132,17 +132,14 @@ def normalize_status(detail: str | None) -> tuple[str, str | None]:
     if upper in {"FINAL", "F"}:
         return "Final", None
 
-    # Handles strings like "Round 1 - In Progress, Thru 12"
     round_thru = re.search(r"ROUND\s+(\d).*?THRU\s+(\d{1,2})", upper)
     if round_thru:
         return f"R{round_thru.group(1)} • Thru {round_thru.group(2)}", None
 
-    # Handles strings like "Thru 12"
     thru_match = re.search(r"\bTHRU\s+(\d{1,2})\b", upper)
     if thru_match:
         return f"Thru {thru_match.group(1)}", None
 
-    # Handles compact ESPN forms like "-2(11)" or "E(F)"
     compact_match = re.search(r"\(([0-9]{1,2}|F)\)", upper)
     if compact_match:
         token = compact_match.group(1)
@@ -347,7 +344,7 @@ def build_player_lookup_from_page(page_url: str) -> tuple[dict[str, dict], dict]
 
     for row in rows:
         parts = row.split()
-        # Split name from score block by locating first score token
+
         score_start = None
         for idx, token in enumerate(parts):
             upper = token.upper()
@@ -374,6 +371,11 @@ def build_player_lookup_from_page(page_url: str) -> tuple[dict[str, dict], dict]
             detail = f"Tee time {tee_time}"
             score_int = 0
         else:
+            detail = "Live"
+
+            # Standard leaderboard row shape:
+            # Rory McIlroy -5 -5 10 -- -- -- -- 31
+            #              score today thru ...
             if len(trailing) >= 2:
                 thru_token = trailing[1].upper()
 
@@ -381,11 +383,19 @@ def build_player_lookup_from_page(page_url: str) -> tuple[dict[str, dict], dict]
                     detail = "R1 • Complete"
                 elif re.fullmatch(r"\d{1,2}", thru_token):
                     detail = f"R1 • Thru {thru_token}"
-                else:
-                    detail = "Live"
-            else:
-                detail = "Live"
-                    
+
+            # Compact fallback shape:
+            # E(F) / -2(11)
+            elif len(trailing) >= 1:
+                compact = trailing[0].upper()
+                compact_match = re.search(r"\(([0-9]{1,2}|F)\)", compact)
+                if compact_match:
+                    token = compact_match.group(1)
+                    if token == "F":
+                        detail = "R1 • Complete"
+                    else:
+                        detail = f"R1 • Thru {token}"
+
         entry = {
             "name": name,
             "normalizedName": normalize_text(name),
@@ -429,8 +439,21 @@ def find_player(player: PlayerConfig, lookup: dict[str, dict]) -> dict | None:
 
     return None
 
+
 def merge_lookups(api_lookup: dict[str, dict], page_lookup: dict[str, dict], teams: list[TeamConfig]) -> dict[str, dict]:
     merged = dict(api_lookup)
+
+    def is_better_page_detail(detail: str | None) -> bool:
+        if not detail:
+            return False
+        upper = detail.upper()
+        return (
+            "THRU" in upper
+            or "COMPLETE" in upper
+            or "TEE TIME" in upper
+            or upper in {"FINAL", "F"}
+            or upper.startswith("R")
+        )
 
     for team in teams:
         for player in team.players:
@@ -449,20 +472,26 @@ def merge_lookups(api_lookup: dict[str, dict], page_lookup: dict[str, dict], tea
                 if best_page is None and key in page_lookup:
                     best_page = page_lookup[key]
 
-            if best_api and best_page:
-                # Keep API score, but use page detail if page has something more useful than generic "Live"
-                if best_page.get("detail") and best_page.get("detail") not in {"Live", "Missing"}:
-                    merged_entry = dict(best_api)
-                    merged_entry["status"] = best_page["status"]
-                    merged_entry["detail"] = best_page["detail"]
-                    merged_entry["teeTime"] = best_page.get("teeTime")
-                    merged_entry["sourceLine"] = best_page.get("sourceLine")
-                    for alias in candidates:
-                        merged[normalize_text(alias)] = merged_entry
+            if best_api and best_page and is_better_page_detail(best_page.get("detail")):
+                merged_entry = dict(best_api)
+                merged_entry["status"] = best_page["status"]
+                merged_entry["detail"] = best_page["detail"]
+                merged_entry["teeTime"] = best_page.get("teeTime")
+                merged_entry["sourceLine"] = best_page.get("sourceLine")
+
+                for alias in candidates:
+                    merged[normalize_text(alias)] = merged_entry
 
     return merged
 
-def build_output_from_lookup(lookup: dict[str, dict], event: dict, teams: list[TeamConfig], source_url: str, mode: str) -> dict:
+
+def build_output_from_lookup(
+    lookup: dict[str, dict],
+    event: dict,
+    teams: list[TeamConfig],
+    source_url: str,
+    mode: str,
+) -> dict:
     rendered_teams: list[dict] = []
 
     for team in teams:
@@ -558,12 +587,18 @@ def main() -> int:
         competitors = get_competitors(payload)
         api_lookup = build_player_lookup_from_api(competitors)
 
-        # Build page lookup too, to improve hole / round / tee-time detail
         page_lookup, debug = build_player_lookup_from_page(ESPN_PAGE_URL)
         (debug_dir / "page_fallback_debug.json").write_text(
             json.dumps(debug, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
+
+        rows = build_leaderboard_rows(choose_score_section(html_to_lines(requests.get(
+            ESPN_PAGE_URL,
+            headers={"User-Agent": USER_AGENT},
+            timeout=DEFAULT_TIMEOUT,
+        ).text))[0])
+        (debug_dir / "rows_debug.txt").write_text("\n".join(rows[:150]), encoding="utf-8")
 
         merged_lookup = merge_lookups(api_lookup, page_lookup, teams)
         output = build_output_from_lookup(merged_lookup, event, teams, ESPN_PAGE_URL, "api+page-status")
@@ -574,6 +609,14 @@ def main() -> int:
             json.dumps(debug, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
+
+        rows = build_leaderboard_rows(choose_score_section(html_to_lines(requests.get(
+            ESPN_PAGE_URL,
+            headers={"User-Agent": USER_AGENT},
+            timeout=DEFAULT_TIMEOUT,
+        ).text))[0])
+        (debug_dir / "rows_debug.txt").write_text("\n".join(rows[:150]), encoding="utf-8")
+
         output = build_output_from_lookup(page_lookup, event, teams, ESPN_PAGE_URL, "page-fallback")
         output["meta"]["apiFallbackReason"] = str(exc)
 
@@ -581,6 +624,7 @@ def main() -> int:
     out_path.write_text(json.dumps(output, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"Wrote {out_path}")
     return 0
+
 
 if __name__ == "__main__":
     raise SystemExit(main())
