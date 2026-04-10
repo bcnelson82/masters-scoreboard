@@ -102,9 +102,7 @@ def fetch_page_text() -> list[str]:
     return [re.sub(r"\s+", " ", line).strip() for line in text.splitlines() if line.strip()]
 
 
-def build_page_lookup() -> tuple[dict[str, dict], list[str]]:
-    lines = fetch_page_text()
-
+def build_page_lookup(lines: list[str]) -> tuple[dict[str, dict], list[str]]:
     lookup: dict[str, dict] = {}
     debug_rows: list[str] = []
 
@@ -113,21 +111,25 @@ def build_page_lookup() -> tuple[dict[str, dict], list[str]]:
         line = lines[i].strip()
 
         # Pattern A:
-        # "Scottie Scheffler E"
-        # next line: "T21 12"
-        # or next line: "5:44 PM"
+        # Scottie Scheffler E
+        # T21 12
+        # or
+        # Justin Thomas -
+        # 5:32 PM
         match = re.match(r"^(.*\S)\s+(E|[+-]\d+|-)$", line)
         if match:
             name = match.group(1).strip()
             score_token = match.group(2).upper()
 
-            # Skip obvious non-player/header lines
-            if name.upper() not in {
+            bad_headers = {
                 "POS PLAYER SCORE TODAY THRU",
                 "LEADERBOARD",
                 "PLAYER STATS",
                 "COURSE STATS",
-            }:
+                "FULL LEADERBOARD",
+            }
+
+            if name.upper() not in bad_headers:
                 score_int = 0 if score_token in {"E", "-"} else parse_score_to_int(score_token)
                 detail = "Live"
                 tee_time = None
@@ -136,9 +138,6 @@ def build_page_lookup() -> tuple[dict[str, dict], list[str]]:
                 if i + 1 < len(lines):
                     next_line = lines[i + 1].strip()
 
-                    # Tee time line examples:
-                    # "5:44 PM"
-                    # "- 5:44 PM"
                     tee_match = re.search(r"(\d{1,2}:\d{2}\s*(AM|PM))", next_line.upper())
                     if tee_match:
                         tee_time = tee_match.group(1).replace("  ", " ")
@@ -146,11 +145,6 @@ def build_page_lookup() -> tuple[dict[str, dict], list[str]]:
                         score_int = 0
                         source_line = f"{line} | {next_line}"
                     else:
-                        # Hole / finish line examples:
-                        # "T21 12"
-                        # "E 17"
-                        # "-2 14"
-                        # "F"
                         thru_match = re.search(r"(?:T?\d+\s+)?(F|\d{1,2})$", next_line.upper())
                         if thru_match:
                             token = thru_match.group(1)
@@ -268,7 +262,10 @@ def main() -> None:
 
     Path("site/data").mkdir(parents=True, exist_ok=True)
 
-    lookup, debug_rows = build_page_lookup()
+    lines = fetch_page_text()
+    Path("site/data/raw_lines_debug.txt").write_text("\n".join(lines[:800]), encoding="utf-8")
+
+    lookup, debug_rows = build_page_lookup(lines)
     Path("site/data/rows_debug.txt").write_text("\n".join(debug_rows[:200]), encoding="utf-8")
 
     output = build_output(lookup, event, teams)
@@ -280,7 +277,6 @@ def main() -> None:
         if player.get("found")
     )
 
-    # Don't overwrite a previously good file with an empty scrape
     if found_count == 0 and out_path.exists():
         print("No players parsed; keeping previous latest.json")
         return
