@@ -32,12 +32,8 @@ jobs:
       - name: Print trigger type
         run: echo "Triggered by ${{ github.event_name }}"
 
-      # FIXED HERE
       - name: Run updater
-        run: |
-          python scripts/update_scores.py \
-            --url "https://site.web.api.espn.com/apis/v2/sports/golf/pga/leaderboard" \
-            --event-id "401811941"
+        run: python scripts/update_scores.py --url "https://www.espn.com/golf/leaderboard?season=2025&tournamentId=401811941"
 
       - name: Verify output
         run: |
