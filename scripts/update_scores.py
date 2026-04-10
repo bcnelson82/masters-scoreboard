@@ -110,68 +110,100 @@ def build_page_lookup(lines: list[str]) -> tuple[dict[str, dict], list[str]]:
     while i < len(lines):
         line = lines[i].strip()
 
-        # Pattern A:
-        # Scottie Scheffler E
-        # T21 12
-        # or
-        # Justin Thomas -
-        # 5:32 PM
-        match = re.match(r"^(.*\S)\s+(E|[+-]\d+|-)$", line)
-        if match:
-            name = match.group(1).strip()
-            score_token = match.group(2).upper()
+        # Skip obvious non-table lines
+        if line.upper() in {
+            "LEADERBOARD",
+            "PLAYER STATS",
+            "COURSE STATS",
+            "POS",
+            "PLAYER",
+            "SCORE",
+            "TODAY",
+            "THRU",
+            "R1",
+            "R2",
+            "R3",
+            "R4",
+            "TOT",
+            "AUTO UPDATE:",
+            "ON",
+        }:
+            i += 1
+            continue
 
-            bad_headers = {
-                "POS PLAYER SCORE TODAY THRU",
-                "LEADERBOARD",
-                "PLAYER STATS",
-                "COURSE STATS",
-                "FULL LEADERBOARD",
-            }
+        # New ESPN structure:
+        # 1
+        # -
+        # Rory McIlroy
+        # -10
+        # -5
+        # 16
+        # 66
+        # 20
+        # -- ...
+        if re.fullmatch(r"T?\d+|-", line):
+            if i + 5 < len(lines):
+                maybe_dash = lines[i + 1].strip()
+                name = lines[i + 2].strip()
+                score_token = lines[i + 3].strip().upper()
+                today_token = lines[i + 4].strip().upper()
+                thru_token = lines[i + 5].strip().upper()
 
-            if name.upper() not in bad_headers:
-                score_int = 0 if score_token in {"E", "-"} else parse_score_to_int(score_token)
-                detail = "Live"
-                tee_time = None
-                source_line = line
+                # Validate this looks like a player block
+                if (
+                    re.search(r"[A-Za-z]", name)
+                    and (
+                        score_token == "E"
+                        or score_token == "-"
+                        or re.fullmatch(r"[+-]\d+", score_token)
+                    )
+                ):
+                    score_int = 0 if score_token in {"E", "-"} else parse_score_to_int(score_token)
+                    tee_time = None
+                    detail = "Live"
 
-                if i + 1 < len(lines):
-                    next_line = lines[i + 1].strip()
+                    if re.fullmatch(r"\d{1,2}:\d{2}", thru_token) and i + 6 < len(lines):
+                        ampm = lines[i + 6].strip().upper()
+                        if ampm in {"AM", "PM"}:
+                            tee_time = f"{thru_token} {ampm}"
+                            detail = f"Tee time {tee_time}"
+                            score_int = 0
+                    elif thru_token == "F":
+                        detail = "R2 • Complete"
+                    elif re.fullmatch(r"\d{1,2}", thru_token):
+                        detail = f"R2 • Thru {thru_token}"
 
-                    tee_match = re.search(r"(\d{1,2}:\d{2}\s*(AM|PM))", next_line.upper())
-                    if tee_match:
-                        tee_time = tee_match.group(1).replace("  ", " ")
-                        detail = f"Tee time {tee_time}"
-                        score_int = 0
-                        source_line = f"{line} | {next_line}"
-                    else:
-                        thru_match = re.search(r"(?:T?\d+\s+)?(F|\d{1,2})$", next_line.upper())
-                        if thru_match:
-                            token = thru_match.group(1)
-                            if token == "F":
-                                detail = "R1 • Complete"
-                            else:
-                                detail = f"R1 • Thru {token}"
-                            source_line = f"{line} | {next_line}"
+                    source_line = " | ".join(
+                        [
+                            line,
+                            maybe_dash,
+                            name,
+                            score_token,
+                            today_token,
+                            thru_token,
+                        ]
+                    )
 
-                entry = {
-                    "name": name,
-                    "scoreToPar": score_int,
-                    "scoreDisplay": score_display(score_int),
-                    "status": detail,
-                    "detail": detail,
-                    "teeTime": tee_time,
-                    "found": True,
-                    "sourceLine": source_line,
-                }
+                    entry = {
+                        "name": name,
+                        "scoreToPar": score_int,
+                        "scoreDisplay": score_display(score_int),
+                        "status": detail,
+                        "detail": detail,
+                        "teeTime": tee_time,
+                        "found": True,
+                        "sourceLine": source_line,
+                    }
 
-                for key in {
-                    normalize_text(name),
-                    normalize_text(make_short_alias(name)),
-                }:
-                    lookup[key] = entry
+                    for key in {
+                        normalize_text(name),
+                        normalize_text(make_short_alias(name)),
+                    }:
+                        lookup[key] = entry
 
-                debug_rows.append(source_line)
+                    debug_rows.append(source_line)
+                    i += 6
+                    continue
 
         i += 1
 
