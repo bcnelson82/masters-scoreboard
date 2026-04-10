@@ -290,18 +290,24 @@ def main():
 
     event, teams = load_config(Path(args.config))
 
-    api = fetch_api(args.event_id)
-    api_lookup = build_api_lookup(api)
+    api_lookup = {}
+    api_error = None
+
+    try:
+        api = fetch_api(args.event_id)
+        api_lookup = build_api_lookup(api)
+    except Exception as exc:
+        api_error = str(exc)
 
     page_lookup = build_page_lookup()
 
-    merged = merge(api_lookup, page_lookup)
+    merged = merge(api_lookup, page_lookup) if api_lookup else page_lookup
 
     output = build_output(merged, event, teams)
 
+    if api_error:
+        output.setdefault("meta", {})
+        output["meta"]["apiFallbackReason"] = api_error
+
     Path(args.out).write_text(json.dumps(output, indent=2))
     print("Updated scores.")
-
-
-if __name__ == "__main__":
-    main()
