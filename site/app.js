@@ -108,18 +108,17 @@ function renderTeam(team, ids) {
       : "";
 
     row.innerHTML = `
-      <div class="player-left">
-        <div class="player-name-line">
-          <div class="player-name">${p.name}</div>
-          ${topBadge}
-        </div>
-        <div class="player-status">${p.status || "Waiting to tee off"}</div>
-      </div>
-      <div class="player-right">
-        <div class="player-score">${formatScore(p.score)}</div>
-        <div class="player-rank-note">Roster spot ${index + 1}</div>
-      </div>
-    `;
+  <div class="player-left">
+    <div class="player-name-line">
+      <div class="player-name">${p.name}</div>
+      ${topBadge}
+    </div>
+  </div>
+  <div class="player-right">
+    <div class="player-score">${formatScore(p.score)}</div>
+    <div class="player-rank-note">${p.status || "Waiting to tee off"}</div>
+  </div>
+`;
 
     playersEl.appendChild(row);
   });
