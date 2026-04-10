@@ -33,8 +33,8 @@ jobs:
         run: echo "Triggered by ${{ github.event_name }}"
 
       - name: Run updater
-        run: python scripts/update_scores.py --url "https://www.espn.com/golf/leaderboard?season=2025&tournamentId=401811941"
-
+        run: python scripts/update_scores.py --event-id "401811941"
+        
       - name: Verify output
         run: |
           echo "=== latest.json preview ==="
